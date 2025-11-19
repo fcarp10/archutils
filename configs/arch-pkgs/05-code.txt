@@ -1,0 +1,8 @@
+### Development
+vscodium-bin
+vscodium-bin-marketplace
+neovim
+vim-plug
+go
+jdk-openjdk
+uv

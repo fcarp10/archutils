@@ -1,0 +1,21 @@
+### Productivity & Office
+thunderbird
+libreoffice-fresh
+hunspell
+hunspell-en_us
+texlive-latexextra
+texlive-fontsextra
+texlive-bibtexextra
+texlive-mathscience
+texlive-publishers
+texlive-binextra
+texlive-xetex
+# signal-desktop
+# ttf-ms-win10-auto
+# tectonic
+gnome-text-editor
+nextcloud-client
+# python-pympress
+# drawio-desktop-bin
+ollama
+# ollama-rocm

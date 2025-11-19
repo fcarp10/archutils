@@ -1,0 +1,10 @@
+### Network
+mullvad-vpn-bin
+nebula
+nm-connection-editor
+nmap
+# mtr
+# remmina
+# freerdp
+# waypipe
+# dnsmasq

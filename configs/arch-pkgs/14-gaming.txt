@@ -1,0 +1,20 @@
+### Gaming
+vulkan-radeon
+lib32-vulkan-radeon
+steam
+# heroic-games-launcher-bin
+# mangohud
+
+### VR
+# sidequest-bin
+# envision-xr-git
+
+### RGB
+# openrgb
+# lm_sensors
+# glib2
+# libgtop
+# i2c-tools
+
+### USB controller gear
+# usb_modeswitch

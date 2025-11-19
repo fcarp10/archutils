@@ -1,0 +1,11 @@
+### Theme
+papirus-icon-theme
+papirus-folders
+adw-gtk-theme
+breezex-cursor-theme
+otf-font-awesome
+ttf-roboto
+ttf-roboto-mono
+ttf-roboto-mono-nerd
+ttf-jetbrains-mono-nerd
+sound-theme-elementary

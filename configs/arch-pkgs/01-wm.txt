@@ -1,0 +1,24 @@
+### Window Managers
+## Hyprland
+# hyprland
+# xdg-desktop-portal-gtk
+# xdg-desktop-portal-hyprland
+# waybar
+# mako
+# wofi
+# hyprpaper
+# hyprpicker
+# hyprlock
+# swayosd
+
+## Niri
+niri
+xdg-desktop-portal-gnome
+xdg-desktop-portal-gtk
+waybar
+mako
+wofi
+swaybg
+swayosd
+xwayland-satellite
+gnome-keyring

@@ -1,0 +1,22 @@
+### DevOps Tools
+docker
+docker-compose
+lazydocker
+# ansible
+# bruno-bin
+# kubectl
+# kubelogin
+
+### KVM virtualization
+# iptables-nft
+# virt-manager
+# qemu-desktop
+# vde2
+# dnsmasq
+# bridge-utils
+# openbsd-netcat
+# edk2-ovmf
+# ebtables
+# iptables-nft
+# dnsmasq
+# dmidecode

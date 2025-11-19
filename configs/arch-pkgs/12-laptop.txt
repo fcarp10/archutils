@@ -1,0 +1,8 @@
+### Laptop 
+auto-cpufreq
+brightnessctl
+thermald
+poweralertd
+libinput
+ydotool
+ruby-fusuma

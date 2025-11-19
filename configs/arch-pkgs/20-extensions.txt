@@ -1,0 +1,54 @@
+### VSCodium Extensions
+## Shell
+foxundermoon.shell-format
+timonwong.shellcheck
+
+## Go
+golang.go
+
+## Python
+# ms-python.python
+# ms-python.isort
+# ms-python.black-formatter
+
+## C++
+# ms-vscode.cpptools
+# platformio.platformio-ide
+
+## Java
+redhat.java
+vscjava.vscode-java-debug
+vscjava.vscode-java-test
+vscjava.vscode-maven
+
+## Git
+eamodio.gitlens
+github.vscode-pull-request-github
+
+## LaTeX/Typst
+James-Yu.latex-workshop
+# nvarner.typst-lsp
+
+## Syntax Highlighting
+yzhang.markdown-all-in-one
+bierner.markdown-mermaid
+bpruitt-goddard.mermaid-markdown-syntax-highlighting
+redhat.ansible
+redhat.vscode-yaml
+kdl-org.kdl
+
+## Helpers
+streetsidesoftware.code-spell-checker
+visualstudioexptteam.vscodeintellicode
+rooveterinaryinc.roo-cline
+
+## Utils
+alefragnani.project-manager
+stkb.rewrap
+esbenp.prettier-vscode
+
+# Theming
+equinusocio.vsc-material-theme-icons
+miguelsolorio.fluent-icons
+azemoh.one-monokai
+oderwat.indent-rainbow

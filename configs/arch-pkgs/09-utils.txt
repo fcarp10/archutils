@@ -1,0 +1,23 @@
+### Utilities
+nemo
+nemo-fileroller
+nemo-emblems
+nemo-preview
+tumbler
+loupe
+file-roller
+baobab
+gnome-disk-utility
+isd
+# yubikey-full-disk-encryption
+# logiops
+
+### Password manager
+# pass
+# pass-otp
+# pinentry
+# browserpass
+# browserpass-chromium
+# browserpass-firefox
+# browserpass-librewolf
+# wofi-pass

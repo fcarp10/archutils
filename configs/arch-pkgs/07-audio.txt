@@ -1,0 +1,14 @@
+### Audio & Bluetooth
+wireplumber
+pipewire
+pipewire-pulse
+pipewire-alsa
+pipewire-jack
+pavucontrol
+sof-firmware
+
+### Bluetooth
+bluez
+bluez-libs
+bluez-utils
+blueberry

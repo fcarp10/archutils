@@ -1,0 +1,20 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Run headless dlv",
+            "type": "process",
+            "command": [
+                "dlv",
+            ],
+            "args": [
+                "debug",
+                "--headless",
+                "--listen=:43000",
+                "--api-version=2",
+                "archutils.go"
+            ],
+            "isBackground": true,
+        }
+    ]
+}

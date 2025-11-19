@@ -1,0 +1,5 @@
+### Printer
+cups-pdf
+ghostscript
+gsfonts
+system-config-printer

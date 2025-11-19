@@ -1,0 +1,47 @@
+### CLI Tools
+## Shell
+alacritty
+zsh
+bash-completion
+fastfetch
+lsd
+bat
+less
+
+
+## Utilities
+curl
+jq
+wget
+downgrade
+duf
+rsync
+ncdu
+btop
+tealdeer
+yazi
+fd
+ripgrep
+fzf
+exfatprogs
+zoxide
+cameractrls
+
+
+## GIT
+git-delta
+lazygit
+
+
+## File manipulation
+pdftk
+zip
+unrar
+p7zip
+imagemagick
+
+
+## SSH
+keychain
+xtermcontrol
+

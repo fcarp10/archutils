@@ -1,0 +1,8 @@
+### Multimedia
+mpv
+freetube-bin
+# celluloid
+# stremio
+# open-tv-bin
+# shotwell
+# footage
