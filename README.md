@@ -1,5 +1,5 @@
 # Arch Linux Utilities
-**ArchUtils** is a TUI built with **[Bubble Tea](BubbleTea-url)** designed to simplify the installation of packages and configurations in Arch Linux.
+**ArchUtils** is a TUI built with **[Bubble Tea](https://github.com/charmbracelet/bubbletea)** designed to simplify the installation of packages and configurations in Arch Linux.
 
 ![Preview](preview.gif)
 
@@ -7,7 +7,7 @@
 
 To launch the application, run the command in your terminal:
 ```bash
-curl -fsSL https://github.com/fcarp10/archutils | sh
+curl -fsSL https://raw.githubusercontent.com/fcarp10/archutils/refs/heads/main/start.sh | sh
 ```
 
 ## 🛠 Building
@@ -28,13 +28,5 @@ curl -fsSL https://github.com/fcarp10/archutils | sh
    ```sh
    ./archutils
    ```
-
-
-
-
-<!-- Shields and URLs -->
-[BubbleTea-url]: https://github.com/charmbracelet/bubbletea
-
-<!--  -->
 
 
