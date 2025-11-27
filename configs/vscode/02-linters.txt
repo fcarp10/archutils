@@ -1,0 +1,16 @@
+### Linters & Utilities
+
+## Git
+eamodio.gitlens
+github.vscode-pull-request-github
+
+## Linters/AI
+streetsidesoftware.code-spell-checker
+visualstudioexptteam.vscodeintellicode
+rooveterinaryinc.roo-cline
+
+## Utils
+alefragnani.project-manager
+stkb.rewrap
+esbenp.prettier-vscode
+

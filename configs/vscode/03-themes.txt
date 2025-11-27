@@ -1,0 +1,6 @@
+### Themes
+
+equinusocio.vsc-material-theme-icons
+miguelsolorio.fluent-icons
+azemoh.one-monokai
+oderwat.indent-rainbow

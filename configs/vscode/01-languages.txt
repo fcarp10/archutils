@@ -1,4 +1,5 @@
-### VSCodium Extensions
+### Programming Languages
+
 ## Shell
 foxundermoon.shell-format
 timonwong.shellcheck
@@ -21,34 +22,17 @@ vscjava.vscode-java-debug
 vscjava.vscode-java-test
 vscjava.vscode-maven
 
-## Git
-eamodio.gitlens
-github.vscode-pull-request-github
-
-## LaTeX/Typst
+## LaTeX
 James-Yu.latex-workshop
-# nvarner.typst-lsp
 
-## Syntax Highlighting
+## Markdown
 yzhang.markdown-all-in-one
 bierner.markdown-mermaid
 bpruitt-goddard.mermaid-markdown-syntax-highlighting
+
+## YAML
 redhat.ansible
 redhat.vscode-yaml
+
+## KDL
 kdl-org.kdl
-
-## Helpers
-streetsidesoftware.code-spell-checker
-visualstudioexptteam.vscodeintellicode
-rooveterinaryinc.roo-cline
-
-## Utils
-alefragnani.project-manager
-stkb.rewrap
-esbenp.prettier-vscode
-
-# Theming
-equinusocio.vsc-material-theme-icons
-miguelsolorio.fluent-icons
-azemoh.one-monokai
-oderwat.indent-rainbow
