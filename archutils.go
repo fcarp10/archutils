@@ -6,16 +6,16 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/fcarp10/archutils/internal/packages"
+	c "github.com/fcarp10/archutils/internal/config"
 	"github.com/fcarp10/archutils/internal/tui"
 )
 
-//go:embed configs/arch-pkgs/*.txt
-var packagesFS embed.FS
+//go:embed configs/*
+var configFS embed.FS
 
 func main() {
 
-	packages.PackagesFS = packagesFS
+	c.ConfigFS = configFS
 
 	p := tea.NewProgram(tui.InitialModel())
 	if _, err := p.Run(); err != nil {

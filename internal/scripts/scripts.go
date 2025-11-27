@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 )
 
 func InstallParu() (bool, string) {
@@ -42,4 +43,22 @@ func InstallParu() (bool, string) {
 	os.RemoveAll("/tmp/paru")
 
 	return true, "Paru installed successfully!"
+}
+
+func InstallVSCodeExtension(extension string) (bool, string) {
+	cmd := exec.Command("codium", "--install-extension", extension)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return false, fmt.Sprintf("%s: Failed to install %v\n%s", extension, err, strings.Trim(string(output), "\n"))
+	}
+	return true, fmt.Sprintf("%s: Installed successfully", extension)
+}
+
+func InstallPackage(pkg string) (bool, string) {
+	cmd := exec.Command("paru", "-S", "--needed", "--noconfirm", pkg)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return false, fmt.Sprintf("%s: Failed to install %v\n%s", pkg, err, strings.Trim(string(output), "\n"))
+	}
+	return true, fmt.Sprintf("%s: Installed successfully", pkg)
 }

@@ -8,7 +8,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/fcarp10/archutils/internal/packages"
+	"github.com/fcarp10/archutils/internal/config"
 	helpkeys "github.com/fcarp10/archutils/internal/tui/helpkeys"
 	"github.com/fcarp10/archutils/internal/tui/logsview"
 )
@@ -28,37 +28,74 @@ type model struct {
 	width         int
 	height        int
 	logsView      logsview.Model
-	categories    []packages.CategoryPkgs
+	categories    []config.Category
 	categoryNames []string
 	cursor        int
 	listStage     int
-	pkgsSelected  map[int]struct{}
-	pkgs          []string
-	extensions    bool
+	itemsSelected map[int]struct{}
+	itemsNames    []string
 	logsVisible   bool
+	directory     string
 }
 
-var menuItems = []string{
-	"Install Packages",
-	"Install Paru",
-	"Pull Dotfiles",
+type menuItem struct {
+	index       int
+	title       string
+	description string
 }
+
+var menuItems = []menuItem{
+	{
+		index:       1,
+		title:       "Arch Linux Packages",
+		description: "A categorized collection of Arch Linux packages"},
+	{
+		index:       2,
+		title:       "Install Paru",
+		description: "Paru AUR helper - a package manager for the Arch Linux community repository"},
+	{
+		index:       3,
+		title:       "VSCode Extensions",
+		description: "A collection of VSCode extensions",
+	},
+}
+
+var menuItemsTitles []string
 
 func (m model) Init() tea.Cmd {
 	return m.logsView.Init()
 }
 
 func New() model {
-	categoriesPkgs, err := packages.ReadCategoriesPkgs()
-	if err != nil {
-		log.Fatalf("Failed to prepare package config files: %v", err)
+	for _, item := range menuItems {
+		menuItemsTitles = append(menuItemsTitles, item.title)
 	}
 	return model{
-		categories:    categoriesPkgs,
-		categoryNames: packages.CategoryNames(categoriesPkgs),
-		cursor:        0,
-		listStage:     0,
+		cursor:    0,
+		listStage: 0,
 	}
+}
+
+func initCategories(dir string) ([]config.Category, []string) {
+	categories, err := config.ReadCategories(dir)
+	if err != nil {
+		log.Fatalf("Failed to read config file: %v", err)
+	}
+	return categories, config.CategoryNames(categories)
+}
+
+func initializeSelection(items []string) ([]string, map[int]struct{}) {
+	selected := make(map[int]struct{})
+	processed := make([]string, len(items))
+	copy(processed, items)
+	for i := range processed {
+		if strings.HasPrefix(processed[i], "#") {
+			processed[i] = strings.TrimSpace(strings.TrimPrefix(processed[i], "#"))
+		} else {
+			selected[i] = struct{}{}
+		}
+	}
+	return processed, selected
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -68,12 +105,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, helpkeys.Keys.Up):
-			m.logsVisible = false
 			if m.cursor > 0 {
 				m.cursor--
 			}
+			if m.listStage == 0 {
+				m.logsVisible = true
+				m.logsView = logsview.NewInstructions(menuItems[m.cursor].description)
+			} else {
+				m.logsVisible = false
+			}
 		case key.Matches(msg, helpkeys.Keys.Down):
-			m.logsVisible = false
 			var listMenuLength int
 			switch m.listStage {
 			case 0:
@@ -81,67 +122,79 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case 1:
 				listMenuLength = len(m.categoryNames)
 			case 2:
-				listMenuLength = len(m.pkgs)
+				listMenuLength = len(m.itemsNames)
 			}
 			if m.cursor < listMenuLength-1 {
 				m.cursor++
 			}
+			if m.listStage == 0 {
+				m.logsVisible = true
+				m.logsView = logsview.NewInstructions(menuItems[m.cursor].description)
+			} else {
+				m.logsVisible = false
+			}
 		case key.Matches(msg, helpkeys.Keys.Enter):
 			switch m.listStage {
-			case 0: // In main menu
+			case 0: // Select menu item
 				switch m.cursor {
-				case 0:
-					m.listStage = 1 // Move to package categories list
-					m.cursor = 0
-					return m, nil
 				case 1: // Install Paru
 					m.logsVisible = true
 					m.logsView = logsview.NewScript()
-					m.logsView, cmd = m.logsView.Update(logsview.RunningScript("paru"))
+					m.logsView, cmd = m.logsView.Update(logsview.RunningScript(logsview.ScriptParu))
 					cmds = append(cmds, cmd)
-				case 2: // TO-DO
-				}
-			case 1: // In package categories list, select packages from a category
-				m.extensions = false
-				m.pkgsSelected = make(map[int]struct{})
-				m.pkgs = make([]string, len(m.categories[m.cursor].PackagesNames))
-				if strings.Contains(m.categories[m.cursor].Key, "extensions") {
-					m.extensions = true
-				}
-				copy(m.pkgs, m.categories[m.cursor].PackagesNames)
-				for i := 0; i < len(m.pkgs); i++ {
-					if strings.HasPrefix(m.pkgs[i], "#") { // Select all packages without #
-						m.pkgs[i] = strings.TrimSpace(strings.TrimPrefix(m.pkgs[i], "#"))
-					} else {
-						m.pkgsSelected[i] = struct{}{}
+				default: // Move to categories
+					switch m.cursor {
+					case 0:
+						m.directory = config.PKGS_DIR
+					case 2:
+						m.directory = config.EXT_DIR
 					}
+					m.cursor = 0
+					m.listStage = 1
+					m.categories, m.categoryNames = initCategories(m.directory)
+					return m, nil
 				}
-				m.listStage = 2
+			case 1: // Select category
+				m.itemsNames = m.categories[m.cursor].ItemsNames
+				m.itemsNames, m.itemsSelected = initializeSelection(m.itemsNames)
 				m.cursor = 0
+				m.listStage = 2
 				return m, nil
-			case 2: // In packages list, enable toggle selection
-				if _, ok := m.pkgsSelected[m.cursor]; ok {
-					delete(m.pkgsSelected, m.cursor)
+			case 2: // Toggle item
+				if _, ok := m.itemsSelected[m.cursor]; ok {
+					delete(m.itemsSelected, m.cursor)
 				} else {
-					m.pkgsSelected[m.cursor] = struct{}{}
+					m.itemsSelected[m.cursor] = struct{}{}
 				}
 			}
 		case key.Matches(msg, helpkeys.Keys.Install):
 			m.logsVisible = true
-			m.logsView = logsview.NewPackages(m.pkgsSelected, m.pkgs, m.extensions)
-			if m.listStage == 2 { // If packages list, then install
+			if m.listStage == 2 { // If in toggle list, then install
+				var itemsNames []string
+				for idx := range m.itemsSelected {
+					if idx < len(m.itemsNames) {
+						itemsNames = append(itemsNames, m.itemsNames[idx])
+					}
+				}
 				m.listStage = 3
-				m.logsView, cmd = m.logsView.Update(msg)
+				var installType logsview.ItemsInstallType
+				switch m.directory {
+				case config.PKGS_DIR:
+					installType = logsview.InstallPackages
+				case config.EXT_DIR:
+					installType = logsview.InstallExtensions
+				}
+				m.logsView = logsview.NewItems(itemsNames)
+				m.logsView, cmd = m.logsView.Update(logsview.InstallItems(installType))
 				cmds = append(cmds, cmd)
 			}
 		case key.Matches(msg, helpkeys.Keys.Back):
 			if m.listStage > 0 {
-				// Move to previous list stage
-				m.listStage = m.listStage - 1
-				m.cursor = 0
-				m.pkgsSelected = make(map[int]struct{})
-				return m, nil
+				m.listStage = m.listStage - 1 // Move to category list
 			}
+			m.cursor = 0
+			m.itemsSelected = make(map[int]struct{})
+			return m, nil
 		case key.Matches(msg, helpkeys.Keys.Quit):
 			return m, tea.Quit
 		}
@@ -149,6 +202,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.listStage = 2
 		m.logsVisible = false
 	case tea.WindowSizeMsg:
+		m.logsVisible = true
+		m.logsView = logsview.NewInstructions(menuItems[m.cursor].description)
 		m.width = msg.Width
 		m.height = msg.Height
 		return m, nil
@@ -163,13 +218,13 @@ func (m model) View() string {
 	var currentList []string
 	switch m.listStage {
 	case 0:
-		currentList = menuItems
+		currentList = menuItemsTitles
 	case 1:
 		currentList = m.categoryNames
 	case 2:
-		currentList = m.pkgs
+		currentList = m.itemsNames
 	case 3:
-		currentList = m.pkgs
+		currentList = m.itemsNames
 	}
 	var list string
 	for i, choice := range currentList {
@@ -181,9 +236,9 @@ func (m model) View() string {
 		}
 
 		if m.listStage == 2 || m.listStage == 3 {
-			if len(m.pkgsSelected) > 0 {
+			if len(m.itemsSelected) > 0 {
 				checked := " "
-				if _, ok := m.pkgsSelected[i]; ok {
+				if _, ok := m.itemsSelected[i]; ok {
 					checked = "x"
 				}
 

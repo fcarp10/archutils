@@ -3,16 +3,12 @@ package logsview
 import (
 	"fmt"
 	"strings"
-	"time"
 
-	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/fcarp10/archutils/internal/packages"
 	"github.com/fcarp10/archutils/internal/scripts"
-	"github.com/fcarp10/archutils/internal/tui/helpkeys"
 )
 
 var (
@@ -23,32 +19,44 @@ var (
 	spinnerStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("63"))
 )
 
-type successInstalledPkg string
-type failedInstalledPkg string
-type finishedInstallPkgs string
 type DisableLogs string
-type RunningScript string
+type ScriptType int
+type RunningScript ScriptType
 type successScript string
 type failedScript string
+type ItemsInstallType int
+type InstallItems ItemsInstallType
+type successInstalledItem string
+type failedInstalledItem string
+type finishedInstallItems string
+
+const (
+	ScriptParu ScriptType = iota
+	// ScriptExtensions
+)
+
+const (
+	InstallPackages ItemsInstallType = iota
+	InstallExtensions
+)
 
 type Model struct {
-	progressBar    progress.Model
-	spinner        spinner.Model
-	numFailedPkgs  int
-	numSuccessPkgs int
-	packageIndex   int
-	packagesLogs   bool
-	pkgsSelected   map[int]struct{}
-	pkgs           []string
-	extensions     bool
-	logs           string
+	progressBar     progress.Model
+	spinner         spinner.Model
+	failedItemsNum  int
+	successItemsNum int
+	itemIndex       int
+	itemsLogs       bool
+	itemsNames      []string
+	itemsType       ItemsInstallType
+	logs            string
 }
 
 func (m Model) Init() tea.Cmd {
 	return m.progressBar.Init()
 }
 
-func NewPackages(pkgsSelected map[int]struct{}, pkgs []string, extensions bool) Model {
+func NewItems(itemsNames []string) Model {
 	p := progress.New(
 		progress.WithDefaultGradient(),
 		progress.WithWidth(40),
@@ -57,11 +65,9 @@ func NewPackages(pkgsSelected map[int]struct{}, pkgs []string, extensions bool) 
 	s := spinner.New()
 	s.Style = spinnerStyle
 	return Model{
-		spinner:      s,
-		progressBar:  p,
-		pkgsSelected: pkgsSelected,
-		pkgs:         pkgs,
-		extensions:   extensions,
+		spinner:     s,
+		progressBar: p,
+		itemsNames:  itemsNames,
 	}
 }
 
@@ -73,43 +79,41 @@ func NewScript() Model {
 	}
 }
 
+func NewInstructions(instructions string) Model {
+	s := spinner.New()
+	s.Style = spinnerStyle
+	return Model{
+		logs: instructions,
+	}
+}
+
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch {
-		case key.Matches(msg, helpkeys.Keys.Install):
-			var pkgNames []string
-			for idx := range m.pkgsSelected {
-				if idx < len(m.pkgs) {
-					pkgNames = append(pkgNames, m.pkgs[idx])
-				}
-			}
-			m.packagesLogs = true
-			m.pkgs = pkgNames
-			return m, func() tea.Msg {
-				return m.installPackage(m.pkgs[m.packageIndex])
-			}
-		}
 
-	case successInstalledPkg:
+	case InstallItems:
+		m.itemsLogs = true
+		m.itemsType = ItemsInstallType(msg)
+		return m, func() tea.Msg { return m.installItem(m.itemsType) }
+
+	case successInstalledItem:
 		m.logs = fmt.Sprintf("%s %s", CheckMark, strings.Trim(string(msg), "\n"))
-		m.numSuccessPkgs++
-		return m.selectNextPackages()
+		m.successItemsNum++
+		return m.selectNextItem(m.itemsType)
 
-	case failedInstalledPkg:
+	case failedInstalledItem:
 		m.logs = fmt.Sprintf("%s %s", CrossMark, strings.Trim(string(msg), "\n"))
-		m.numFailedPkgs++
-		return m.selectNextPackages()
+		m.failedItemsNum++
+		return m.selectNextItem(m.itemsType)
 
-	case finishedInstallPkgs:
-		m.packageIndex = 0
-		m.numFailedPkgs = 0
-		m.numSuccessPkgs = 0
+	case finishedInstallItems:
+		m.itemIndex = 0
+		m.failedItemsNum = 0
+		m.successItemsNum = 0
 		return m, func() tea.Msg { return DisableLogs(msg) }
 
 	case RunningScript:
-		return m, tea.Batch(m.spinner.Tick, func() tea.Msg { return runScript(fmt.Sprintf("%v", msg)) })
+		return m, tea.Batch(m.spinner.Tick, func() tea.Msg { return runScript(ScriptType(msg)) })
 
 	case successScript:
 		m.logs = fmt.Sprintf("%s %s", CheckMark, msg)
@@ -135,70 +139,77 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) selectNextPackages() (Model, tea.Cmd) {
-	prevPkg := m.pkgs[m.packageIndex]
-	n := len(m.pkgs)
-	if m.packageIndex >= n-1 { // Installation finished
+func (m Model) selectNextItem(itemsType ItemsInstallType) (Model, tea.Cmd) {
+	prevPkg := m.itemsNames[m.itemIndex]
+	n := len(m.itemsNames)
+	if m.itemIndex >= n-1 { // Installation finished
 		var doneMsg string
-		if m.numFailedPkgs > 0 {
-			doneMsg = doneStyle.Render(fmt.Sprintf("Done! %d packages installed, %d packages failed.", n-m.numFailedPkgs, m.numFailedPkgs))
+		if m.failedItemsNum > 0 {
+			doneMsg = doneStyle.Render(fmt.Sprintf("Done! %d items installed, %d items failed.", n-m.failedItemsNum, m.failedItemsNum))
 		} else {
-			doneMsg = doneStyle.Render(fmt.Sprintf("Done! All %d packages installed successfully.", n))
+			doneMsg = doneStyle.Render(fmt.Sprintf("Done! All %d items installed successfully.", n))
 		}
 		return m, tea.Sequence(
 			tea.Printf("%s", m.logs),
 			tea.Printf("%s", doneMsg),
-			func() tea.Msg { return finishedInstallPkgs(prevPkg) })
+			func() tea.Msg { return finishedInstallItems(prevPkg) })
 	}
-	progressCmd := m.progressBar.SetPercent(float64(m.numSuccessPkgs) / float64(n))
-	m.packageIndex++ // Move to next pkg
+	progressCmd := m.progressBar.SetPercent(float64(m.successItemsNum) / float64(n))
+	m.itemIndex++ // Move to next item
 	return m, tea.Batch(
 		progressCmd,
-		tea.Printf("%s", m.logs), // Print message from previous package
-		func() tea.Msg { return m.installPackage(m.pkgs[m.packageIndex]) }, // Install the next package
+		tea.Printf("%s", m.logs), // Print message from previous item
+		func() tea.Msg { return m.installItem(ItemsInstallType(itemsType)) }, // Install the next item
 		m.spinner.Tick,
 	)
 }
 
-func (m Model) installPackage(pkg string) tea.Msg {
-	success, logs := packages.InstallPackage(pkg, m.extensions)
+func (m Model) installItem(itemsType ItemsInstallType) tea.Msg {
+	var success bool
+	var logs string
+	switch itemsType {
+	case InstallPackages:
+		success, logs = scripts.InstallPackage(m.itemsNames[m.itemIndex])
+	case InstallExtensions:
+		success, logs = scripts.InstallVSCodeExtension(m.itemsNames[m.itemIndex])
+	}
 	if success {
-		return successInstalledPkg(logs)
+		return successInstalledItem(logs)
 	} else {
-		return failedInstalledPkg(logs)
+		return failedInstalledItem(logs)
 	}
 }
 
-func runScript(script string) tea.Msg {
+func runScript(script ScriptType) tea.Msg {
 	var success bool
 	var logs string
-	if script == "paru" {
-		time.Sleep(time.Second * 1)
+	switch script {
+	case ScriptParu:
 		success, logs = scripts.InstallParu()
-		if success {
-			return successScript(logs)
-		} else {
-			return failedScript(logs)
-		}
+	default:
 	}
-	return nil
+	if success {
+		return successScript(logs)
+	} else {
+		return failedScript(logs)
+	}
 }
 
 func (m Model) View() string {
 	var s string
-	if m.packagesLogs {
-		n := len(m.pkgs)
+	if m.itemsLogs {
+		n := len(m.itemsNames)
 		w := lipgloss.Width(fmt.Sprintf("%d", n))
-		pkgCount := fmt.Sprintf(" %*d/%*d", w, m.numSuccessPkgs, w, n)
+		itemCount := fmt.Sprintf(" %*d/%*d", w, m.successItemsNum, w, n)
 
 		spin := m.spinner.View() + " "
 		progBar := m.progressBar.View()
 
-		pkgName := currentPkgNameStyle.Render(m.pkgs[m.packageIndex])
-		info := lipgloss.NewStyle().Render("Installing " + pkgName)
+		itemName := currentPkgNameStyle.Render(m.itemsNames[m.itemIndex])
+		info := lipgloss.NewStyle().Render("Installing " + itemName)
 
 		gap := strings.Repeat(" ", 5)
-		s = spin + info + gap + progBar + pkgCount
+		s = spin + info + gap + progBar + itemCount
 	} else if m.logs == "" {
 		spin := m.spinner.View() + " "
 		s = spin + "Running script, please wait..."
