@@ -38,10 +38,15 @@ func ReadFilteredLines(filePath string) ([]string, error) {
 	return lines, nil
 }
 
+type Item struct {
+	Name        string
+	Description string
+}
+
 type Category struct {
-	Name       string
-	Key        string
-	ItemsNames []string
+	Name  string
+	Key   string
+	Items []Item
 }
 
 func ReadCategories(dir string) ([]Category, error) {
@@ -66,7 +71,12 @@ func ReadCategories(dir string) ([]Category, error) {
 		category := new(Category)
 		if err == nil {
 			category.Name = strings.TrimSuffix(categoryName, ".txt")
-			category.ItemsNames = items
+			var itemList []Item
+			for _, itemName := range items {
+				item := Item{Name: itemName}
+				itemList = append(itemList, item)
+			}
+			category.Items = itemList
 			category.Key = strings.TrimSuffix(subFile.Name(), ".txt")
 		}
 		categories = append(categories, *category)

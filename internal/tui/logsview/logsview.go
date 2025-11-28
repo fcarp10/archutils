@@ -79,11 +79,11 @@ func NewScript() Model {
 	}
 }
 
-func NewInstructions(instructions string) Model {
+func NewInfo(info string) Model {
 	s := spinner.New()
 	s.Style = spinnerStyle
 	return Model{
-		logs: instructions,
+		logs: info,
 	}
 }
 

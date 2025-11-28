@@ -62,3 +62,21 @@ func InstallPackage(pkg string) (bool, string) {
 	}
 	return true, fmt.Sprintf("%s: Installed successfully", pkg)
 }
+
+func GetPackageDescription(item string) string {
+	cmd := exec.Command("pacman", "-Q", "--info", item)
+	output, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	lines := strings.Split(string(output), "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "Description") {
+			parts := strings.SplitN(line, ":", 2)
+			if len(parts) == 2 {
+				return strings.TrimSpace(parts[1])
+			}
+		}
+	}
+	return ""
+}

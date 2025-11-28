@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/fcarp10/archutils/internal/config"
+	"github.com/fcarp10/archutils/internal/scripts"
 	helpkeys "github.com/fcarp10/archutils/internal/tui/helpkeys"
 	"github.com/fcarp10/archutils/internal/tui/logsview"
 )
@@ -25,17 +26,18 @@ var (
 )
 
 type model struct {
-	width         int
-	height        int
-	logsView      logsview.Model
-	categories    []config.Category
-	categoryNames []string
-	cursor        int
-	listStage     int
-	itemsSelected map[int]struct{}
-	itemsNames    []string
-	logsVisible   bool
-	directory     string
+	width            int
+	height           int
+	logsView         logsview.Model
+	categories       []config.Category
+	categoryNames    []string
+	categorySelected config.Category
+	cursor           int
+	listStage        int
+	itemsSelected    map[int]struct{}
+	itemsNames       []string
+	logsVisible      bool
+	directory        string
 }
 
 type menuItem struct {
@@ -98,6 +100,23 @@ func initializeSelection(items []string) ([]string, map[int]struct{}) {
 	return processed, selected
 }
 
+func (m model) showInformation() model {
+	m.logsVisible = true
+	switch m.listStage {
+	case 0:
+		m.logsView = logsview.NewInfo(menuItems[m.cursor].description)
+	case 2:
+		description := m.categorySelected.Items[m.cursor].Description
+		if description == "" {
+			description = "No information available for this item"
+		}
+		m.logsView = logsview.NewInfo(description)
+	default:
+		m.logsVisible = false
+	}
+	return m
+}
+
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	var cmds []tea.Cmd
@@ -108,12 +127,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.cursor > 0 {
 				m.cursor--
 			}
-			if m.listStage == 0 {
-				m.logsVisible = true
-				m.logsView = logsview.NewInstructions(menuItems[m.cursor].description)
-			} else {
-				m.logsVisible = false
-			}
+			m = m.showInformation()
 		case key.Matches(msg, helpkeys.Keys.Down):
 			var listMenuLength int
 			switch m.listStage {
@@ -127,12 +141,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.cursor < listMenuLength-1 {
 				m.cursor++
 			}
-			if m.listStage == 0 {
-				m.logsVisible = true
-				m.logsView = logsview.NewInstructions(menuItems[m.cursor].description)
-			} else {
-				m.logsVisible = false
-			}
+			m = m.showInformation()
 		case key.Matches(msg, helpkeys.Keys.Enter):
 			switch m.listStage {
 			case 0: // Select menu item
@@ -149,16 +158,31 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					case 2:
 						m.directory = config.EXT_DIR
 					}
+					m.categories, m.categoryNames = initCategories(m.directory)
 					m.cursor = 0
 					m.listStage = 1
-					m.categories, m.categoryNames = initCategories(m.directory)
+					m = m.showInformation()
 					return m, nil
 				}
 			case 1: // Select category
-				m.itemsNames = m.categories[m.cursor].ItemsNames
-				m.itemsNames, m.itemsSelected = initializeSelection(m.itemsNames)
+				var names []string
+				for _, item := range m.categories[m.cursor].Items {
+					names = append(names, item.Name)
+				}
+				m.itemsNames = names
+				m.itemsNames, m.itemsSelected = initializeSelection(names)
+				for i, item := range m.itemsNames {
+					switch m.directory {
+					case config.PKGS_DIR:
+						m.categories[m.cursor].Items[i].Description = scripts.GetPackageDescription(item)
+					case config.EXT_DIR:
+						// TO-DO
+					}
+				}
+				m.categorySelected = m.categories[m.cursor]
 				m.cursor = 0
 				m.listStage = 2
+				m = m.showInformation()
 				return m, nil
 			case 2: // Toggle item
 				if _, ok := m.itemsSelected[m.cursor]; ok {
@@ -193,6 +217,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.listStage = m.listStage - 1 // Move to category list
 			}
 			m.cursor = 0
+			m = m.showInformation()
 			m.itemsSelected = make(map[int]struct{})
 			return m, nil
 		case key.Matches(msg, helpkeys.Keys.Quit):
@@ -203,7 +228,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.logsVisible = false
 	case tea.WindowSizeMsg:
 		m.logsVisible = true
-		m.logsView = logsview.NewInstructions(menuItems[m.cursor].description)
+		m = m.showInformation()
 		m.width = msg.Width
 		m.height = msg.Height
 		return m, nil
