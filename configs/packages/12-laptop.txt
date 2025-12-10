@@ -1,7 +1,7 @@
 ### Laptop 
-auto-cpufreq
+auto-cpufreq [auto-cpufreq]
 brightnessctl
-thermald
+thermald [thermald]
 poweralertd
 libinput
 ydotool

@@ -9,7 +9,7 @@
 # hyprpaper
 # hyprpicker
 # hyprlock
-# swayosd
+# swayosd [swayosd-libinput-backend]
 
 ## Niri
 niri
@@ -19,6 +19,6 @@ waybar
 mako
 wofi
 swaybg
-swayosd
+swayosd [swayosd-libinput-backend]
 xwayland-satellite
 gnome-keyring

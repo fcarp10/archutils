@@ -1,5 +1,5 @@
-### Printer
-cups-pdf
+### Printers
+cups-pdf [cups]
 ghostscript
 gsfonts
 system-config-printer

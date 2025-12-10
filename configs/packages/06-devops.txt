@@ -1,5 +1,5 @@
 ### DevOps Tools
-docker
+docker [docker]
 docker-compose
 lazydocker
 # act
@@ -8,9 +8,9 @@ lazydocker
 # kubectl
 # kubelogin
 
-### KVM virtualization
+## KVM virtualization
 # iptables-nft
-# virt-manager
+# virt-manager [libvirtd]
 # qemu-desktop
 # vde2
 # dnsmasq

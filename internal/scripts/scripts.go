@@ -54,13 +54,55 @@ func InstallVSCodeExtension(extension string) (bool, string) {
 	return true, fmt.Sprintf("%s: Installed successfully", extension)
 }
 
-func InstallPackage(pkg string) (bool, string) {
-	cmd := exec.Command("paru", "-S", "--needed", "--noconfirm", pkg)
+func enableService(service string, userLevel bool) (bool, string) {
+	var cmd *exec.Cmd
+	if userLevel {
+		cmd = exec.Command("systemctl", "--user", "enable", "--now", service)
+	} else {
+		cmd = exec.Command("sudo", "systemctl", "enable", "--now", service)
+	}
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return false, fmt.Sprintf("%s: Failed to install %v\n%s", pkg, err, strings.Trim(string(output), "\n"))
+		return false, fmt.Sprintf("Failed to enable %s: %v\n%s", service, err, strings.Trim(string(output), "\n"))
 	}
-	return true, fmt.Sprintf("%s: Installed successfully", pkg)
+	return true, fmt.Sprintf("%s: Enabled successfully", service)
+}
+
+func InstallPackage(pkg string) (bool, string) {
+	fields := strings.Fields(pkg)
+	if len(fields) == 0 {
+		return false, "Invalid package string"
+	}
+	packageName := fields[0]
+	services := []string{}
+	userLevel := false
+	for i := 1; i < len(fields); i++ {
+		field := fields[i]
+		if strings.HasPrefix(field, "[") && strings.HasSuffix(field, "]") {
+			content := strings.TrimSuffix(strings.TrimPrefix(field, "["), "]")
+			if content == "user" {
+				userLevel = true
+			} else {
+				services = append(services, content)
+			}
+		}
+	}
+	// Install package
+	cmd := exec.Command("paru", "-S", "--needed", "--noconfirm", packageName)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return false, fmt.Sprintf("%s: Failed to install %v\n%s", packageName, err, strings.Trim(string(output), "\n"))
+	}
+	message := fmt.Sprintf("%s: Installed successfully", packageName)
+	// Enable services if any
+	for _, service := range services {
+		success, enableMsg := enableService(service, userLevel)
+		if !success {
+			return false, fmt.Sprintf("%s\n%s", message, enableMsg)
+		}
+		message += "\n" + enableMsg
+	}
+	return true, message
 }
 
 func GetPackageDescription(item string) string {

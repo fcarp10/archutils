@@ -1,14 +1,16 @@
 ### Audio & Bluetooth
-wireplumber
-pipewire
-pipewire-pulse
+
+## Audio
+wireplumber [wireplumber] [user]
+pipewire [pipewire.socket] [user]
+pipewire-pulse [pipewire-pulse.socket] [user]
 pipewire-alsa
 pipewire-jack
 pavucontrol
 sof-firmware
 
-### Bluetooth
-bluez
+## Bluetooth
+bluez [bluetooth]
 bluez-libs
 bluez-utils
 blueberry
