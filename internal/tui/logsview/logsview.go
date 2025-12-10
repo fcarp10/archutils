@@ -32,7 +32,7 @@ type finishedInstallItems string
 
 const (
 	ScriptParu ScriptType = iota
-	// ScriptExtensions
+	ScriptAutologin
 )
 
 const (
@@ -186,6 +186,8 @@ func runScript(script ScriptType) tea.Msg {
 	switch script {
 	case ScriptParu:
 		success, logs = scripts.InstallParu()
+	case ScriptAutologin:
+		success, logs = scripts.EnableAutologin()
 	default:
 	}
 	if success {

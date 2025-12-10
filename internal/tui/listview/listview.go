@@ -60,6 +60,11 @@ var menuItems = []menuItem{
 		title:       "VSCode Extensions",
 		description: "A collection of VSCode extensions",
 	},
+	{
+		index:       4,
+		title:       "Enable Autologin",
+		description: "Enable and configure autologin for the current user",
+	},
 }
 
 var menuItemsTitles []string
@@ -150,6 +155,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.logsVisible = true
 					m.logsView = logsview.NewScript()
 					m.logsView, cmd = m.logsView.Update(logsview.RunningScript(logsview.ScriptParu))
+					cmds = append(cmds, cmd)
+				case 3: // Enable Autologin
+					m.logsVisible = true
+					m.logsView = logsview.NewScript()
+					m.logsView, cmd = m.logsView.Update(logsview.RunningScript(logsview.ScriptAutologin))
 					cmds = append(cmds, cmd)
 				default: // Move to categories
 					switch m.cursor {

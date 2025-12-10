@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	c "github.com/fcarp10/archutils/internal/config"
 )
 
 func InstallParu() (bool, string) {
@@ -121,4 +123,32 @@ func GetPackageDescription(item string) string {
 		}
 	}
 	return ""
+}
+
+func EnableAutologin() (bool, string) {
+	user := os.Getenv("USER")
+	if user == "" {
+		return false, "Unable to get current user"
+	}
+
+	content, err := c.ConfigFS.ReadFile(c.CONFIG_DIR + "/autologin.conf")
+	if err != nil {
+		return false, fmt.Sprintf("Failed to read autologin.conf: %v", err)
+	}
+
+	template := string(content)
+	replaced := strings.ReplaceAll(template, "$USER", user)
+
+	cmd1 := exec.Command("sudo", "mkdir", "-p", "/etc/systemd/system/getty@tty1.service.d")
+	if err := cmd1.Run(); err != nil {
+		return false, fmt.Sprintf("Failed to create directory: %v", err)
+	}
+
+	cmd2 := exec.Command("sudo", "tee", "/etc/systemd/system/getty@tty1.service.d/autologin.conf")
+	cmd2.Stdin = strings.NewReader(replaced)
+	if err := cmd2.Run(); err != nil {
+		return false, fmt.Sprintf("Failed to write autologin.conf: %v", err)
+	}
+
+	return true, "Autologin configured successfully"
 }
