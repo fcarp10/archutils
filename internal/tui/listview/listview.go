@@ -65,6 +65,11 @@ var menuItems = []menuItem{
 		title:       "Enable Autologin",
 		description: "Enable and configure autologin for the current user",
 	},
+	{
+		index:       5,
+		title:       "Enable Passwordless SSH",
+		description: "Disable SSH password authentication and enable/restart SSH service",
+	},
 }
 
 var menuItemsTitles []string
@@ -160,6 +165,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.logsVisible = true
 					m.logsView = logsview.NewScript()
 					m.logsView, cmd = m.logsView.Update(logsview.RunningScript(logsview.ScriptAutologin))
+					cmds = append(cmds, cmd)
+				case 4: // Enable Passwordless SSH
+					m.logsVisible = true
+					m.logsView = logsview.NewScript()
+					m.logsView, cmd = m.logsView.Update(logsview.RunningScript(logsview.ScriptPasswordlessSSH))
 					cmds = append(cmds, cmd)
 				default: // Move to categories
 					switch m.cursor {
