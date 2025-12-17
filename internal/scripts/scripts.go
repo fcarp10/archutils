@@ -11,14 +11,19 @@ import (
 )
 
 func InstallParu() (bool, string) {
-	// First, check if paru is already installed
-	cmd := exec.Command("which", "paru")
-	err := cmd.Run()
-	if err == nil {
-		return true, "Paru is already installed"
+
+	// Check if another version of paru is installed and remove it
+	checkOutput, checkErr := exec.Command("pacman", "-Qeq", "paru").CombinedOutput()
+	if checkErr == nil && len(checkOutput) > 0 {
+		pkgs := strings.TrimSpace(string(checkOutput))
+		cleanCmd := exec.Command("sudo", "pacman", "-Rns", "--noconfirm", pkgs)
+		cleanOutput, cleanErr := cleanCmd.CombinedOutput()
+		if cleanErr != nil {
+			return false, fmt.Sprintf("Failed to uninstall previous versions of paru (%s): %v\n%s", pkgs, cleanErr, strings.TrimSpace(string(cleanOutput)))
+		}
 	}
 
-	// If paru is not installed, first install dependencies
+	// Install dependencies
 	baseDevCmd := exec.Command("sudo", "pacman", "-S", "--needed", "--noconfirm", "base-devel", "git")
 	if err := baseDevCmd.Run(); err != nil {
 		return false, fmt.Sprintf("Failed to install base-devel and git: %v", err)
@@ -36,7 +41,7 @@ func InstallParu() (bool, string) {
 	buildCmd.Stdout = &stdout
 	buildCmd.Stderr = &stderr
 
-	err = buildCmd.Run()
+	err := buildCmd.Run()
 	if err != nil {
 		return false, fmt.Sprintf("Installation Error:\n%v\n\nStdout:\n%s\n\nStderr:\n%s\n", err, stdout.String(), stderr.String())
 	}
