@@ -13,6 +13,23 @@ import (
 	"github.com/fcarp10/archutils/internal/tui/logsview"
 )
 
+// Navigation stages
+const (
+	stageMenu = iota
+	stageCategory
+	stageItems
+	stageInstalling
+)
+
+// Menu item indices
+const (
+	menuPackages = iota
+	menuInstallParu
+	menuVSCodeExtensions
+	menuAutologin
+	menuPasswordlessSSH
+)
+
 var (
 	listStyle = lipgloss.NewStyle().
 			Align(lipgloss.Left, lipgloss.Center).
@@ -24,7 +41,7 @@ var (
 				Foreground(lipgloss.Color("51"))
 )
 
-type model struct {
+type Model struct {
 	width            int
 	height           int
 	logsView         logsview.Model
@@ -40,32 +57,28 @@ type model struct {
 }
 
 type menuItem struct {
-	index       int
 	title       string
 	description string
 }
 
 var menuItems = []menuItem{
 	{
-		index:       1,
 		title:       "Arch Linux Packages",
-		description: "A categorized collection of Arch Linux packages"},
+		description: "A categorized collection of Arch Linux packages",
+	},
 	{
-		index:       2,
 		title:       "Install Paru",
-		description: "Paru AUR helper - a package manager for the Arch Linux community repository"},
+		description: "Paru AUR helper - a package manager for the Arch Linux community repository",
+	},
 	{
-		index:       3,
 		title:       "VSCode Extensions",
 		description: "A collection of VSCode extensions",
 	},
 	{
-		index:       4,
 		title:       "Enable Autologin",
 		description: "Enable and configure autologin for the current user",
 	},
 	{
-		index:       5,
 		title:       "Enable Passwordless SSH",
 		description: "Disable SSH password authentication and enable/restart SSH service",
 	},
@@ -73,19 +86,26 @@ var menuItems = []menuItem{
 
 var menuItemsTitles []string
 
-func (m model) Init() tea.Cmd {
+func (m Model) Init() tea.Cmd {
 	return m.logsView.Init()
 }
 
-func New() model {
+func New() Model {
 	menuItemsTitles = make([]string, len(menuItems))
 	for i, item := range menuItems {
 		menuItemsTitles[i] = item.title
 	}
-	return model{
+	return Model{
 		cursor:    0,
-		listStage: 0,
+		listStage: stageMenu,
 	}
+}
+
+func (m Model) SelectionCount() (selected, total int) {
+	if m.listStage != stageItems && m.listStage != stageInstalling {
+		return -1, -1
+	}
+	return len(m.itemsSelected), len(m.itemsNames)
 }
 
 func initCategories(dir string) ([]config.Category, []string, error) {
@@ -110,12 +130,12 @@ func initializeSelection(items []string) ([]string, map[int]struct{}) {
 	return processed, selected
 }
 
-func (m model) showInformation() model {
+func (m Model) showInformation() Model {
 	m.logsVisible = true
 	switch m.listStage {
-	case 0:
+	case stageMenu:
 		m.logsView = logsview.NewInfo(menuItems[m.cursor].description)
-	case 2:
+	case stageItems:
 		description := m.categorySelected.Items[m.cursor].Description
 		if description == "" {
 			description = "No information available for this item"
@@ -127,7 +147,116 @@ func (m model) showInformation() model {
 	return m
 }
 
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m Model) handleMenuEnter() (Model, tea.Cmd) {
+	var cmd tea.Cmd
+	var cmds []tea.Cmd
+
+	switch m.cursor {
+	case menuInstallParu:
+		m.logsVisible = true
+		m.logsView = logsview.NewScript()
+		m.logsView, cmd = m.logsView.Update(logsview.RunningScript(logsview.ScriptParu))
+		cmds = append(cmds, cmd)
+	case menuAutologin:
+		m.logsVisible = true
+		m.logsView = logsview.NewScript()
+		m.logsView, cmd = m.logsView.Update(logsview.RunningScript(logsview.ScriptAutologin))
+		cmds = append(cmds, cmd)
+	case menuPasswordlessSSH:
+		m.logsVisible = true
+		m.logsView = logsview.NewScript()
+		m.logsView, cmd = m.logsView.Update(logsview.RunningScript(logsview.ScriptPasswordlessSSH))
+		cmds = append(cmds, cmd)
+	default:
+		switch m.cursor {
+		case menuPackages:
+			m.directory = config.PKGS_DIR
+		case menuVSCodeExtensions:
+			m.directory = config.EXT_DIR
+		}
+		var err error
+		m.categories, m.categoryNames, err = initCategories(m.directory)
+		if err != nil {
+			m.logsVisible = true
+			m.logsView = logsview.NewInfo(fmt.Sprintf("Error: %v", err))
+			return m, nil
+		}
+		m.cursor = 0
+		m.listStage = stageCategory
+		m = m.showInformation()
+		return m, nil
+	}
+	return m, tea.Batch(cmds...)
+}
+
+func (m Model) handleCategoryEnter() (Model, tea.Cmd) {
+	var names []string
+	for _, item := range m.categories[m.cursor].Items {
+		names = append(names, item.Name)
+	}
+	m.itemsNames = names
+	m.itemsNames, m.itemsSelected = initializeSelection(names)
+	for i, item := range m.itemsNames {
+		switch m.directory {
+		case config.PKGS_DIR:
+			m.categories[m.cursor].Items[i].Description = scripts.GetPackageDescription(item)
+		case config.EXT_DIR:
+			// TO-DO
+		}
+	}
+	m.categorySelected = m.categories[m.cursor]
+	m.cursor = 0
+	m.listStage = stageItems
+	m = m.showInformation()
+	return m, nil
+}
+
+func (m Model) handleInstall() (Model, tea.Cmd) {
+	if m.listStage != stageItems {
+		return m, nil
+	}
+
+	m.logsVisible = true
+	var itemsNames []string
+	for idx := range m.itemsSelected {
+		if idx < len(m.itemsNames) {
+			itemsNames = append(itemsNames, m.itemsNames[idx])
+		}
+	}
+	m.listStage = stageInstalling
+	var installType logsview.ItemsInstallType
+	switch m.directory {
+	case config.PKGS_DIR:
+		installType = logsview.InstallPackages
+	case config.EXT_DIR:
+		installType = logsview.InstallExtensions
+	}
+	m.logsView = logsview.NewItems(itemsNames)
+	var cmd tea.Cmd
+	m.logsView, cmd = m.logsView.Update(logsview.InstallItems(installType))
+	return m, cmd
+}
+
+func (m Model) handleSelectAll() Model {
+	if m.listStage != stageItems {
+		return m
+	}
+	m.itemsSelected = make(map[int]struct{})
+	for i := range m.itemsNames {
+		m.itemsSelected[i] = struct{}{}
+	}
+	return m
+}
+
+func (m Model) handleDeselectAll() Model {
+	if m.listStage != stageItems {
+		return m
+	}
+	m.itemsSelected = make(map[int]struct{})
+	return m
+}
+
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	var cmds []tea.Cmd
 	switch msg := msg.(type) {
@@ -141,11 +270,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, helpkeys.Keys.Down):
 			var listMenuLength int
 			switch m.listStage {
-			case 0:
+			case stageMenu:
 				listMenuLength = len(menuItems)
-			case 1:
+			case stageCategory:
 				listMenuLength = len(m.categoryNames)
-			case 2:
+			case stageItems:
 				listMenuLength = len(m.itemsNames)
 			}
 			if m.cursor < listMenuLength-1 {
@@ -154,63 +283,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m = m.showInformation()
 		case key.Matches(msg, helpkeys.Keys.Enter):
 			switch m.listStage {
-			case 0: // Select menu item
-				switch m.cursor {
-				case 1: // Install Paru
-					m.logsVisible = true
-					m.logsView = logsview.NewScript()
-					m.logsView, cmd = m.logsView.Update(logsview.RunningScript(logsview.ScriptParu))
-					cmds = append(cmds, cmd)
-				case 3: // Enable Autologin
-					m.logsVisible = true
-					m.logsView = logsview.NewScript()
-					m.logsView, cmd = m.logsView.Update(logsview.RunningScript(logsview.ScriptAutologin))
-					cmds = append(cmds, cmd)
-				case 4: // Enable Passwordless SSH
-					m.logsVisible = true
-					m.logsView = logsview.NewScript()
-					m.logsView, cmd = m.logsView.Update(logsview.RunningScript(logsview.ScriptPasswordlessSSH))
-					cmds = append(cmds, cmd)
-				default: // Move to categories
-					switch m.cursor {
-					case 0:
-						m.directory = config.PKGS_DIR
-					case 2:
-						m.directory = config.EXT_DIR
-					}
-					var err error
-					m.categories, m.categoryNames, err = initCategories(m.directory)
-					if err != nil {
-						m.logsVisible = true
-						m.logsView = logsview.NewInfo(fmt.Sprintf("Error: %v", err))
-						return m, nil
-					}
-					m.cursor = 0
-					m.listStage = 1
-					m = m.showInformation()
-					return m, nil
-				}
-			case 1: // Select category
-				var names []string
-				for _, item := range m.categories[m.cursor].Items {
-					names = append(names, item.Name)
-				}
-				m.itemsNames = names
-				m.itemsNames, m.itemsSelected = initializeSelection(names)
-				for i, item := range m.itemsNames {
-					switch m.directory {
-					case config.PKGS_DIR:
-						m.categories[m.cursor].Items[i].Description = scripts.GetPackageDescription(item)
-					case config.EXT_DIR:
-						// TO-DO
-					}
-				}
-				m.categorySelected = m.categories[m.cursor]
-				m.cursor = 0
-				m.listStage = 2
-				m = m.showInformation()
-				return m, nil
-			case 2: // Toggle item
+			case stageMenu:
+				m, cmd = m.handleMenuEnter()
+				return m, cmd
+			case stageCategory:
+				m, cmd = m.handleCategoryEnter()
+				return m, cmd
+			case stageItems:
 				if _, ok := m.itemsSelected[m.cursor]; ok {
 					delete(m.itemsSelected, m.cursor)
 				} else {
@@ -218,32 +297,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		case key.Matches(msg, helpkeys.Keys.Install):
-			m.logsVisible = true
-			if m.listStage == 2 { // If in toggle list, then install
-				var itemsNames []string
-				for idx := range m.itemsSelected {
-					if idx < len(m.itemsNames) {
-						itemsNames = append(itemsNames, m.itemsNames[idx])
-					}
-				}
-				m.listStage = 3
-				var installType logsview.ItemsInstallType
-				switch m.directory {
-				case config.PKGS_DIR:
-					installType = logsview.InstallPackages
-				case config.EXT_DIR:
-					installType = logsview.InstallExtensions
-				}
-				m.logsView = logsview.NewItems(itemsNames)
-				m.logsView, cmd = m.logsView.Update(logsview.InstallItems(installType))
-				cmds = append(cmds, cmd)
-			}
+			m, cmd = m.handleInstall()
+			cmds = append(cmds, cmd)
+		case key.Matches(msg, helpkeys.Keys.SelectAll):
+			m = m.handleSelectAll()
+		case key.Matches(msg, helpkeys.Keys.DeselectAll):
+			m = m.handleDeselectAll()
 		case key.Matches(msg, helpkeys.Keys.Back):
 			if m.listStage > 0 {
 				m.itemsNames = nil
 				m.categorySelected = config.Category{}
 				m.itemsSelected = make(map[int]struct{})
-				m.listStage = m.listStage - 1 // Move to category list
+				m.listStage = m.listStage - 1
 			}
 			m.cursor = 0
 			m = m.showInformation()
@@ -252,7 +317,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 	case logsview.DisableLogs:
-		m.listStage = 2
+		m.listStage = stageItems
 		m.logsVisible = false
 	case tea.WindowSizeMsg:
 		m.logsVisible = true
@@ -267,16 +332,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (m model) View() string {
+func (m Model) View() string {
 	var currentList []string
 	switch m.listStage {
-	case 0:
+	case stageMenu:
 		currentList = menuItemsTitles
-	case 1:
+	case stageCategory:
 		currentList = m.categoryNames
-	case 2:
+	case stageItems:
 		currentList = m.itemsNames
-	case 3:
+	case stageInstalling:
 		currentList = m.itemsNames
 	}
 	var list string
@@ -288,7 +353,7 @@ func (m model) View() string {
 			choice = listItemSelectedStyle.Render(choice)
 		}
 
-		if m.listStage == 2 || m.listStage == 3 {
+		if m.listStage == stageItems || m.listStage == stageInstalling {
 			checked := " "
 			if _, ok := m.itemsSelected[i]; ok {
 				checked = "x"

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 
 	hlp "github.com/fcarp10/archutils/internal/tui/helpkeys"
@@ -9,10 +10,14 @@ import (
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
+var selectionCountStyle = lipgloss.NewStyle().
+	Foreground(lipgloss.Color("241"))
+
 type mainModel struct {
-	listView tea.Model
+	listView listview.Model
 	help     help.Model
 }
 
@@ -36,16 +41,32 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, hlp.Keys.Help):
 			m.help.ShowAll = !m.help.ShowAll
 		default:
-			m.listView, cmd = m.listView.Update(msg)
+			var updated tea.Model
+			updated, cmd = m.listView.Update(msg)
+			m.listView = updated.(listview.Model)
 			cmds = append(cmds, cmd)
 		}
 	default:
-		m.listView, cmd = m.listView.Update(msg)
+		var updated tea.Model
+		updated, cmd = m.listView.Update(msg)
+		m.listView = updated.(listview.Model)
 		cmds = append(cmds, cmd)
 	}
 	return m, tea.Batch(cmds...)
 }
 
 func (m mainModel) View() string {
-	return "\n" + m.listView.View() + strings.Repeat("\n", 2) + m.help.View(hlp.Keys)
+	var statusBar string
+	selected, total := m.listView.SelectionCount()
+	if selected >= 0 && total >= 0 {
+		statusBar = selectionCountStyle.Render(fmt.Sprintf("  Selected: %d/%d", selected, total))
+	}
+
+	helpView := m.help.View(hlp.Keys)
+	content := "\n" + m.listView.View()
+	if statusBar != "" {
+		content += "\n" + statusBar
+	}
+	content += strings.Repeat("\n", 2) + helpView
+	return content
 }
