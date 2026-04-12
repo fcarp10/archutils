@@ -75,7 +75,19 @@ func enableService(service string, userLevel bool) (bool, string) {
 	return true, fmt.Sprintf("\033[32m%s\033[0m Enabled successfully", service)
 }
 
+func CheckParuInstalled() (bool, string) {
+	_, err := exec.LookPath("paru")
+	if err != nil {
+		return false, "paru is not installed. Please select 'Install Paru' from the main menu first."
+	}
+	return true, ""
+}
+
 func InstallPackage(pkg string) (bool, string) {
+	if ok, msg := CheckParuInstalled(); !ok {
+		return false, msg
+	}
+
 	fields := strings.Fields(pkg)
 	if len(fields) == 0 {
 		return false, "Invalid package string"

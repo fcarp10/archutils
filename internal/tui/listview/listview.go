@@ -2,7 +2,6 @@ package listview
 
 import (
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -79,8 +78,9 @@ func (m model) Init() tea.Cmd {
 }
 
 func New() model {
-	for _, item := range menuItems {
-		menuItemsTitles = append(menuItemsTitles, item.title)
+	menuItemsTitles = make([]string, len(menuItems))
+	for i, item := range menuItems {
+		menuItemsTitles[i] = item.title
 	}
 	return model{
 		cursor:    0,
@@ -88,12 +88,12 @@ func New() model {
 	}
 }
 
-func initCategories(dir string) ([]config.Category, []string) {
+func initCategories(dir string) ([]config.Category, []string, error) {
 	categories, err := config.ReadCategories(dir)
 	if err != nil {
-		log.Fatalf("Failed to read config file: %v", err)
+		return nil, nil, fmt.Errorf("failed to read config directory %s: %w", dir, err)
 	}
-	return categories, config.CategoryNames(categories)
+	return categories, config.CategoryNames(categories), nil
 }
 
 func initializeSelection(items []string) ([]string, map[int]struct{}) {
@@ -178,7 +178,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					case 2:
 						m.directory = config.EXT_DIR
 					}
-					m.categories, m.categoryNames = initCategories(m.directory)
+					var err error
+					m.categories, m.categoryNames, err = initCategories(m.directory)
+					if err != nil {
+						m.logsVisible = true
+						m.logsView = logsview.NewInfo(fmt.Sprintf("Error: %v", err))
+						return m, nil
+					}
 					m.cursor = 0
 					m.listStage = 1
 					m = m.showInformation()
@@ -234,11 +240,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case key.Matches(msg, helpkeys.Keys.Back):
 			if m.listStage > 0 {
+				m.itemsNames = nil
+				m.categorySelected = config.Category{}
+				m.itemsSelected = make(map[int]struct{})
 				m.listStage = m.listStage - 1 // Move to category list
 			}
 			m.cursor = 0
 			m = m.showInformation()
-			m.itemsSelected = make(map[int]struct{})
 			return m, nil
 		case key.Matches(msg, helpkeys.Keys.Quit):
 			return m, tea.Quit
@@ -281,15 +289,13 @@ func (m model) View() string {
 		}
 
 		if m.listStage == 2 || m.listStage == 3 {
-			if len(m.itemsSelected) > 0 {
-				checked := " "
-				if _, ok := m.itemsSelected[i]; ok {
-					checked = "x"
-				}
-
-				checked = lipgloss.NewStyle().Render(" [" + checked + "]")
-				list += fmt.Sprintf("%s%s%s\n", cursor, checked, choice)
+			checked := " "
+			if _, ok := m.itemsSelected[i]; ok {
+				checked = "x"
 			}
+
+			checked = lipgloss.NewStyle().Render(" [" + checked + "]")
+			list += fmt.Sprintf("%s%s%s\n", cursor, checked, choice)
 		} else {
 			list += fmt.Sprintf("%s%s\n", cursor, choice)
 		}
