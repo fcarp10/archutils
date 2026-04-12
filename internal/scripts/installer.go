@@ -9,6 +9,7 @@ type Installer interface {
 	EnablePasswordlessSudo() (bool, string)
 	GetPackageDescription(item string) string
 	CheckParuInstalled() (bool, string)
+	IsPackageInstalled(pkg string) bool
 }
 
 type Runner struct{}
@@ -43,4 +44,8 @@ func (r Runner) GetPackageDescription(item string) string {
 
 func (r Runner) CheckParuInstalled() (bool, string) {
 	return CheckParuInstalled()
+}
+
+func (r Runner) IsPackageInstalled(pkg string) bool {
+	return IsPackageInstalled(pkg)
 }

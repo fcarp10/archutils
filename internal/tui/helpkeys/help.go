@@ -9,6 +9,8 @@ type keyMap struct {
 	Install     key.Binding
 	SelectAll   key.Binding
 	DeselectAll key.Binding
+	ConfirmYes  key.Binding
+	ConfirmNo   key.Binding
 	Help        key.Binding
 	Quit        key.Binding
 	Back        key.Binding
@@ -43,6 +45,14 @@ var Keys = keyMap{
 		key.WithKeys("A"),
 		key.WithHelp("A", "Deselect all"),
 	),
+	ConfirmYes: key.NewBinding(
+		key.WithKeys("y"),
+		key.WithHelp("y", "Confirm install"),
+	),
+	ConfirmNo: key.NewBinding(
+		key.WithKeys("n"),
+		key.WithHelp("n", "Cancel install"),
+	),
 	Help: key.NewBinding(
 		key.WithKeys("?"),
 		key.WithHelp("?", "Toggle help"),
@@ -61,6 +71,7 @@ func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Back},
 		{k.Enter, k.SelectAll, k.DeselectAll},
-		{k.Install, k.Help, k.Quit},
+		{k.Install, k.ConfirmYes, k.ConfirmNo},
+		{k.Help, k.Quit},
 	}
 }

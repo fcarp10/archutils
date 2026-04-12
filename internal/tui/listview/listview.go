@@ -17,6 +17,7 @@ const (
 	stageMenu = iota
 	stageCategory
 	stageItems
+	stageConfirm
 	stageInstalling
 )
 
@@ -38,6 +39,8 @@ var (
 	logsStyle             = listStyle.Align(lipgloss.Left, lipgloss.Center)
 	listItemSelectedStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("51"))
+	installedItemStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("241"))
 )
 
 type Model struct {
@@ -51,6 +54,7 @@ type Model struct {
 	currentStage     int
 	selectedItems    map[int]struct{}
 	itemNames        []string
+	installedItems   map[int]bool
 	logsVisible      bool
 	directory        string
 	installer        scripts.Installer
@@ -100,14 +104,15 @@ func New(installer scripts.Installer) Model {
 		menuItemsTitles[i] = item.title
 	}
 	return Model{
-		cursor:       0,
-		currentStage: stageMenu,
-		installer:    installer,
+		cursor:         0,
+		currentStage:   stageMenu,
+		installer:      installer,
+		installedItems: make(map[int]bool),
 	}
 }
 
 func (m Model) SelectionCount() (selected, total int) {
-	if m.currentStage != stageItems && m.currentStage != stageInstalling {
+	if m.currentStage != stageItems && m.currentStage != stageConfirm && m.currentStage != stageInstalling {
 		return -1, -1
 	}
 	return len(m.selectedItems), len(m.itemNames)
@@ -146,6 +151,8 @@ func (m Model) showInformation() Model {
 			description = "No information available for this item"
 		}
 		m.logsView = logsview.NewInfo(description)
+	case stageConfirm:
+		// Don't change the logs view - it shows the confirmation dialog
 	default:
 		m.logsVisible = false
 	}
@@ -206,10 +213,14 @@ func (m Model) handleCategoryEnter() (Model, tea.Cmd) {
 	}
 	m.itemNames = names
 	m.itemNames, m.selectedItems = initializeSelection(names)
+	m.installedItems = make(map[int]bool)
 	for i, item := range m.itemNames {
 		switch m.directory {
 		case config.PkgsDir():
-			m.categories[m.cursor].Items[i].Description = m.installer.GetPackageDescription(item)
+			if m.installer.IsPackageInstalled(item) {
+				m.installedItems[i] = true
+				m.categories[m.cursor].Items[i].Description = m.installer.GetPackageDescription(item)
+			}
 		case config.ExtDir():
 			// TO-DO
 		}
@@ -226,6 +237,33 @@ func (m Model) handleInstall() (Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if len(m.selectedItems) == 0 {
+		m.logsVisible = true
+		m.logsView = logsview.NewInfo("No items selected. Select items with space/enter.")
+		return m, nil
+	}
+
+	m.currentStage = stageConfirm
+	m.logsVisible = true
+
+	var selectedList []string
+	for idx := range m.selectedItems {
+		if idx < len(m.itemNames) {
+			selectedList = append(selectedList, m.itemNames[idx])
+		}
+	}
+
+	confirmMsg := fmt.Sprintf("Confirm installation of %d item(s):\n\n", len(selectedList))
+	for _, name := range selectedList {
+		confirmMsg += "  • " + name + "\n"
+	}
+	confirmMsg += "\n  y: Confirm   n: Cancel"
+
+	m.logsView = logsview.NewInfo(confirmMsg)
+	return m, nil
+}
+
+func (m Model) handleConfirmYes() (Model, tea.Cmd) {
 	m.logsVisible = true
 	var selectedItemNames []string
 	for idx := range m.selectedItems {
@@ -245,6 +283,12 @@ func (m Model) handleInstall() (Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.logsView, cmd = m.logsView.Update(logsview.InstallItems(installType))
 	return m, cmd
+}
+
+func (m Model) handleConfirmNo() Model {
+	m.currentStage = stageItems
+	m.logsVisible = false
+	return m
 }
 
 func (m Model) handleSelectAll() Model {
@@ -271,6 +315,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		if m.currentStage == stageConfirm {
+			switch {
+			case key.Matches(msg, helpkeys.Keys.ConfirmYes):
+				m, cmd = m.handleConfirmYes()
+				cmds = append(cmds, cmd)
+			case key.Matches(msg, helpkeys.Keys.ConfirmNo), key.Matches(msg, helpkeys.Keys.Back):
+				m = m.handleConfirmNo()
+			}
+			return m, tea.Batch(cmds...)
+		}
+
 		switch {
 		case key.Matches(msg, helpkeys.Keys.Up):
 			if m.cursor > 0 {
@@ -318,6 +373,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.itemNames = nil
 				m.selectedCategory = config.Category{}
 				m.selectedItems = make(map[int]struct{})
+				m.installedItems = make(map[int]bool)
 				m.currentStage = m.currentStage - 1
 			}
 			m.cursor = 0
@@ -349,31 +405,35 @@ func (m Model) View() string {
 		currentList = menuItemsTitles
 	case stageCategory:
 		currentList = m.categoryNames
-	case stageItems:
-		currentList = m.itemNames
-	case stageInstalling:
+	case stageItems, stageConfirm, stageInstalling:
 		currentList = m.itemNames
 	}
 	var list string
 	for i, choice := range currentList {
 		cursor := " "
-		choice = " " + choice
-		if m.cursor == i {
-			cursor = listItemSelectedStyle.Render("❯")
-			choice = listItemSelectedStyle.Render(choice)
+		displayChoice := " " + choice
+
+		isItemStage := m.currentStage == stageItems || m.currentStage == stageConfirm || m.currentStage == stageInstalling
+
+		if isItemStage && m.installedItems[i] {
+			displayChoice = installedItemStyle.Render(displayChoice + " ✓")
 		}
 
-		// Always render checkboxes in items and installing stages
-		if m.currentStage == stageItems || m.currentStage == stageInstalling {
+		if m.cursor == i {
+			cursor = listItemSelectedStyle.Render("❯")
+			displayChoice = listItemSelectedStyle.Render(displayChoice)
+		}
+
+		if isItemStage {
 			checked := " "
 			if _, ok := m.selectedItems[i]; ok {
 				checked = "x"
 			}
 
 			checked = lipgloss.NewStyle().Render(" [" + checked + "]")
-			list += fmt.Sprintf("%s%s%s\n", cursor, checked, choice)
+			list += fmt.Sprintf("%s%s%s\n", cursor, checked, displayChoice)
 		} else {
-			list += fmt.Sprintf("%s%s\n", cursor, choice)
+			list += fmt.Sprintf("%s%s\n", cursor, displayChoice)
 		}
 	}
 	list = strings.TrimRight(list, "\n")

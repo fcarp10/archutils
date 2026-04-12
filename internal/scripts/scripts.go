@@ -83,6 +83,15 @@ func CheckParuInstalled() (bool, string) {
 	return true, ""
 }
 
+func IsPackageInstalled(pkg string) bool {
+	fields := strings.Fields(pkg)
+	if len(fields) == 0 {
+		return false
+	}
+	cmd := exec.Command("pacman", "-Q", fields[0])
+	return cmd.Run() == nil
+}
+
 func InstallPackage(pkg string) (bool, string) {
 	if ok, msg := CheckParuInstalled(); !ok {
 		return false, msg
