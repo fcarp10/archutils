@@ -34,6 +34,7 @@ const (
 	ScriptParu ScriptType = iota
 	ScriptAutologin
 	ScriptPasswordlessSSH
+	ScriptPasswordlessSudo
 )
 
 const (
@@ -191,6 +192,8 @@ func runScript(script ScriptType) tea.Msg {
 		success, logs = scripts.EnableAutologin()
 	case ScriptPasswordlessSSH:
 		success, logs = scripts.EnablePasswordlessSSH()
+	case ScriptPasswordlessSudo:
+		success, logs = scripts.EnablePasswordlessSudo()
 	default:
 	}
 	if success {

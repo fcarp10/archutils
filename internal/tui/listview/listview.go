@@ -28,6 +28,7 @@ const (
 	menuVSCodeExtensions
 	menuAutologin
 	menuPasswordlessSSH
+	menuPasswordlessSudo
 )
 
 var (
@@ -41,6 +42,7 @@ var (
 				Foreground(lipgloss.Color("51"))
 )
 
+// Model is the main list view model exported for use by the TUI package.
 type Model struct {
 	width            int
 	height           int
@@ -82,6 +84,10 @@ var menuItems = []menuItem{
 		title:       "Enable Passwordless SSH",
 		description: "Disable SSH password authentication and enable/restart SSH service",
 	},
+	{
+		title:       "Configure Passwordless Sudo",
+		description: "Configure passwordless sudo for the current user (will prompt for password once)",
+	},
 }
 
 var menuItemsTitles []string
@@ -101,6 +107,8 @@ func New() Model {
 	}
 }
 
+// SelectionCount returns the number of selected items and total items.
+// Returns -1 for total if not in the items stage.
 func (m Model) SelectionCount() (selected, total int) {
 	if m.listStage != stageItems && m.listStage != stageInstalling {
 		return -1, -1
@@ -147,6 +155,7 @@ func (m Model) showInformation() Model {
 	return m
 }
 
+// handleMenuEnter handles Enter key presses at the main menu stage.
 func (m Model) handleMenuEnter() (Model, tea.Cmd) {
 	var cmd tea.Cmd
 	var cmds []tea.Cmd
@@ -166,6 +175,11 @@ func (m Model) handleMenuEnter() (Model, tea.Cmd) {
 		m.logsVisible = true
 		m.logsView = logsview.NewScript()
 		m.logsView, cmd = m.logsView.Update(logsview.RunningScript(logsview.ScriptPasswordlessSSH))
+		cmds = append(cmds, cmd)
+	case menuPasswordlessSudo:
+		m.logsVisible = true
+		m.logsView = logsview.NewScript()
+		m.logsView, cmd = m.logsView.Update(logsview.RunningScript(logsview.ScriptPasswordlessSudo))
 		cmds = append(cmds, cmd)
 	default:
 		switch m.cursor {
@@ -189,6 +203,7 @@ func (m Model) handleMenuEnter() (Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+// handleCategoryEnter handles Enter key presses at the category selection stage.
 func (m Model) handleCategoryEnter() (Model, tea.Cmd) {
 	var names []string
 	for _, item := range m.categories[m.cursor].Items {
@@ -211,6 +226,7 @@ func (m Model) handleCategoryEnter() (Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleInstall handles the Install key press at the items stage.
 func (m Model) handleInstall() (Model, tea.Cmd) {
 	if m.listStage != stageItems {
 		return m, nil
@@ -237,6 +253,7 @@ func (m Model) handleInstall() (Model, tea.Cmd) {
 	return m, cmd
 }
 
+// handleSelectAll selects all items in the current items list.
 func (m Model) handleSelectAll() Model {
 	if m.listStage != stageItems {
 		return m
@@ -248,6 +265,7 @@ func (m Model) handleSelectAll() Model {
 	return m
 }
 
+// handleDeselectAll deselects all items in the current items list.
 func (m Model) handleDeselectAll() Model {
 	if m.listStage != stageItems {
 		return m
@@ -289,7 +307,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case stageCategory:
 				m, cmd = m.handleCategoryEnter()
 				return m, cmd
-			case stageItems:
+			case stageItems: // Toggle item
 				if _, ok := m.itemsSelected[m.cursor]; ok {
 					delete(m.itemsSelected, m.cursor)
 				} else {
@@ -308,7 +326,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.itemsNames = nil
 				m.categorySelected = config.Category{}
 				m.itemsSelected = make(map[int]struct{})
-				m.listStage = m.listStage - 1
+				m.listStage = m.listStage - 1 // Move to category list
 			}
 			m.cursor = 0
 			m = m.showInformation()
@@ -353,6 +371,7 @@ func (m Model) View() string {
 			choice = listItemSelectedStyle.Render(choice)
 		}
 
+		// Always render checkboxes in items and installing stages
 		if m.listStage == stageItems || m.listStage == stageInstalling {
 			checked := " "
 			if _, ok := m.itemsSelected[i]; ok {

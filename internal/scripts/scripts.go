@@ -197,3 +197,48 @@ func EnablePasswordlessSSH() (bool, string) {
 	}
 	return true, msg1 + " - " + msg2
 }
+
+// EnablePasswordlessSudo configures passwordless sudo for the current user
+// by creating a sudoers drop-in file at /etc/sudoers.d/<username>.
+// This operation will prompt the user for their sudo password once.
+func EnablePasswordlessSudo() (bool, string) {
+	user := os.Getenv("USER")
+	if user == "" {
+		return false, "Unable to get current user"
+	}
+
+	// Check if passwordless sudo is already configured
+	checkCmd := exec.Command("sudo", "-n", "true")
+	if err := checkCmd.Run(); err == nil {
+		return true, "Passwordless sudo is already configured"
+	}
+
+	// Create the sudoers drop-in file content
+	sudoersContent := fmt.Sprintf("%s ALL=(ALL) NOPASSWD: ALL\n", user)
+
+	// Write the sudoers file using sudo (this will prompt for a password)
+	cmd := exec.Command("sudo", "tee", fmt.Sprintf("/etc/sudoers.d/%s", user))
+	cmd.Stdin = strings.NewReader(sudoersContent)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return false, fmt.Sprintf("Failed to configure passwordless sudo: %v\n%s", err, strings.TrimSpace(stderr.String()))
+	}
+
+	// Verify the sudoers file syntax
+	checkSudoersCmd := exec.Command("sudo", "visudo", "-c", "-f", fmt.Sprintf("/etc/sudoers.d/%s", user))
+	if checkOutput, checkErr := checkSudoersCmd.CombinedOutput(); checkErr != nil {
+		// Remove the invalid file
+		exec.Command("sudo", "rm", "-f", fmt.Sprintf("/etc/sudoers.d/%s", user)).Run()
+		return false, fmt.Sprintf("Sudoers file syntax error: %s", strings.TrimSpace(string(checkOutput)))
+	}
+
+	// Set correct permissions
+	permCmd := exec.Command("sudo", "chmod", "440", fmt.Sprintf("/etc/sudoers.d/%s", user))
+	if err := permCmd.Run(); err != nil {
+		return false, fmt.Sprintf("Failed to set permissions on sudoers file: %v", err)
+	}
+
+	return true, "Passwordless sudo configured successfully"
+}
