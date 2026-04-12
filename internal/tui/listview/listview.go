@@ -13,7 +13,6 @@ import (
 	"github.com/fcarp10/archutils/internal/tui/logsview"
 )
 
-// Navigation stages
 const (
 	stageMenu = iota
 	stageCategory
@@ -21,7 +20,6 @@ const (
 	stageInstalling
 )
 
-// Menu item indices
 const (
 	menuPackages = iota
 	menuInstallParu
@@ -42,20 +40,20 @@ var (
 				Foreground(lipgloss.Color("51"))
 )
 
-// Model is the main list view model exported for use by the TUI package.
 type Model struct {
 	width            int
 	height           int
 	logsView         logsview.Model
 	categories       []config.Category
 	categoryNames    []string
-	categorySelected config.Category
+	selectedCategory config.Category
 	cursor           int
-	listStage        int
-	itemsSelected    map[int]struct{}
-	itemsNames       []string
+	currentStage     int
+	selectedItems    map[int]struct{}
+	itemNames        []string
 	logsVisible      bool
 	directory        string
+	installer        scripts.Installer
 }
 
 type menuItem struct {
@@ -96,24 +94,23 @@ func (m Model) Init() tea.Cmd {
 	return m.logsView.Init()
 }
 
-func New() Model {
+func New(installer scripts.Installer) Model {
 	menuItemsTitles = make([]string, len(menuItems))
 	for i, item := range menuItems {
 		menuItemsTitles[i] = item.title
 	}
 	return Model{
-		cursor:    0,
-		listStage: stageMenu,
+		cursor:       0,
+		currentStage: stageMenu,
+		installer:    installer,
 	}
 }
 
-// SelectionCount returns the number of selected items and total items.
-// Returns -1 for total if not in the items stage.
 func (m Model) SelectionCount() (selected, total int) {
-	if m.listStage != stageItems && m.listStage != stageInstalling {
+	if m.currentStage != stageItems && m.currentStage != stageInstalling {
 		return -1, -1
 	}
-	return len(m.itemsSelected), len(m.itemsNames)
+	return len(m.selectedItems), len(m.itemNames)
 }
 
 func initCategories(dir string) ([]config.Category, []string, error) {
@@ -140,11 +137,11 @@ func initializeSelection(items []string) ([]string, map[int]struct{}) {
 
 func (m Model) showInformation() Model {
 	m.logsVisible = true
-	switch m.listStage {
+	switch m.currentStage {
 	case stageMenu:
 		m.logsView = logsview.NewInfo(menuItems[m.cursor].description)
 	case stageItems:
-		description := m.categorySelected.Items[m.cursor].Description
+		description := m.selectedCategory.Items[m.cursor].Description
 		if description == "" {
 			description = "No information available for this item"
 		}
@@ -155,7 +152,6 @@ func (m Model) showInformation() Model {
 	return m
 }
 
-// handleMenuEnter handles Enter key presses at the main menu stage.
 func (m Model) handleMenuEnter() (Model, tea.Cmd) {
 	var cmd tea.Cmd
 	var cmds []tea.Cmd
@@ -163,30 +159,30 @@ func (m Model) handleMenuEnter() (Model, tea.Cmd) {
 	switch m.cursor {
 	case menuInstallParu:
 		m.logsVisible = true
-		m.logsView = logsview.NewScript()
+		m.logsView = logsview.NewScript(m.installer)
 		m.logsView, cmd = m.logsView.Update(logsview.RunningScript(logsview.ScriptParu))
 		cmds = append(cmds, cmd)
 	case menuAutologin:
 		m.logsVisible = true
-		m.logsView = logsview.NewScript()
+		m.logsView = logsview.NewScript(m.installer)
 		m.logsView, cmd = m.logsView.Update(logsview.RunningScript(logsview.ScriptAutologin))
 		cmds = append(cmds, cmd)
 	case menuPasswordlessSSH:
 		m.logsVisible = true
-		m.logsView = logsview.NewScript()
+		m.logsView = logsview.NewScript(m.installer)
 		m.logsView, cmd = m.logsView.Update(logsview.RunningScript(logsview.ScriptPasswordlessSSH))
 		cmds = append(cmds, cmd)
 	case menuPasswordlessSudo:
 		m.logsVisible = true
-		m.logsView = logsview.NewScript()
+		m.logsView = logsview.NewScript(m.installer)
 		m.logsView, cmd = m.logsView.Update(logsview.RunningScript(logsview.ScriptPasswordlessSudo))
 		cmds = append(cmds, cmd)
 	default:
 		switch m.cursor {
 		case menuPackages:
-			m.directory = config.PKGS_DIR
+			m.directory = config.PkgsDir()
 		case menuVSCodeExtensions:
-			m.directory = config.EXT_DIR
+			m.directory = config.ExtDir()
 		}
 		var err error
 		m.categories, m.categoryNames, err = initCategories(m.directory)
@@ -196,81 +192,77 @@ func (m Model) handleMenuEnter() (Model, tea.Cmd) {
 			return m, nil
 		}
 		m.cursor = 0
-		m.listStage = stageCategory
+		m.currentStage = stageCategory
 		m = m.showInformation()
 		return m, nil
 	}
 	return m, tea.Batch(cmds...)
 }
 
-// handleCategoryEnter handles Enter key presses at the category selection stage.
 func (m Model) handleCategoryEnter() (Model, tea.Cmd) {
 	var names []string
 	for _, item := range m.categories[m.cursor].Items {
 		names = append(names, item.Name)
 	}
-	m.itemsNames = names
-	m.itemsNames, m.itemsSelected = initializeSelection(names)
-	for i, item := range m.itemsNames {
+	m.itemNames = names
+	m.itemNames, m.selectedItems = initializeSelection(names)
+	for i, item := range m.itemNames {
 		switch m.directory {
-		case config.PKGS_DIR:
-			m.categories[m.cursor].Items[i].Description = scripts.GetPackageDescription(item)
-		case config.EXT_DIR:
+		case config.PkgsDir():
+			m.categories[m.cursor].Items[i].Description = m.installer.GetPackageDescription(item)
+		case config.ExtDir():
 			// TO-DO
 		}
 	}
-	m.categorySelected = m.categories[m.cursor]
+	m.selectedCategory = m.categories[m.cursor]
 	m.cursor = 0
-	m.listStage = stageItems
+	m.currentStage = stageItems
 	m = m.showInformation()
 	return m, nil
 }
 
-// handleInstall handles the Install key press at the items stage.
 func (m Model) handleInstall() (Model, tea.Cmd) {
-	if m.listStage != stageItems {
+	if m.currentStage != stageItems {
 		return m, nil
 	}
 
 	m.logsVisible = true
-	var itemsNames []string
-	for idx := range m.itemsSelected {
-		if idx < len(m.itemsNames) {
-			itemsNames = append(itemsNames, m.itemsNames[idx])
+	var selectedItemNames []string
+	for idx := range m.selectedItems {
+		if idx < len(m.itemNames) {
+			selectedItemNames = append(selectedItemNames, m.itemNames[idx])
 		}
 	}
-	m.listStage = stageInstalling
+	m.currentStage = stageInstalling
 	var installType logsview.ItemsInstallType
 	switch m.directory {
-	case config.PKGS_DIR:
+	case config.PkgsDir():
 		installType = logsview.InstallPackages
-	case config.EXT_DIR:
+	case config.ExtDir():
 		installType = logsview.InstallExtensions
 	}
-	m.logsView = logsview.NewItems(itemsNames)
+	m.logsView = logsview.NewItems(selectedItemNames, m.installer)
 	var cmd tea.Cmd
 	m.logsView, cmd = m.logsView.Update(logsview.InstallItems(installType))
 	return m, cmd
 }
 
-// handleSelectAll selects all items in the current items list.
 func (m Model) handleSelectAll() Model {
-	if m.listStage != stageItems {
+	if m.currentStage != stageItems {
 		return m
 	}
-	m.itemsSelected = make(map[int]struct{})
-	for i := range m.itemsNames {
-		m.itemsSelected[i] = struct{}{}
+	m.selectedItems = make(map[int]struct{})
+	for i := range m.itemNames {
+		m.selectedItems[i] = struct{}{}
 	}
 	return m
 }
 
-// handleDeselectAll deselects all items in the current items list.
 func (m Model) handleDeselectAll() Model {
-	if m.listStage != stageItems {
+	if m.currentStage != stageItems {
 		return m
 	}
-	m.itemsSelected = make(map[int]struct{})
+	m.selectedItems = make(map[int]struct{})
 	return m
 }
 
@@ -287,31 +279,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m = m.showInformation()
 		case key.Matches(msg, helpkeys.Keys.Down):
 			var listMenuLength int
-			switch m.listStage {
+			switch m.currentStage {
 			case stageMenu:
 				listMenuLength = len(menuItems)
 			case stageCategory:
 				listMenuLength = len(m.categoryNames)
 			case stageItems:
-				listMenuLength = len(m.itemsNames)
+				listMenuLength = len(m.itemNames)
 			}
 			if m.cursor < listMenuLength-1 {
 				m.cursor++
 			}
 			m = m.showInformation()
 		case key.Matches(msg, helpkeys.Keys.Enter):
-			switch m.listStage {
+			switch m.currentStage {
 			case stageMenu:
 				m, cmd = m.handleMenuEnter()
 				return m, cmd
 			case stageCategory:
 				m, cmd = m.handleCategoryEnter()
 				return m, cmd
-			case stageItems: // Toggle item
-				if _, ok := m.itemsSelected[m.cursor]; ok {
-					delete(m.itemsSelected, m.cursor)
+			case stageItems:
+				if _, ok := m.selectedItems[m.cursor]; ok {
+					delete(m.selectedItems, m.cursor)
 				} else {
-					m.itemsSelected[m.cursor] = struct{}{}
+					m.selectedItems[m.cursor] = struct{}{}
 				}
 			}
 		case key.Matches(msg, helpkeys.Keys.Install):
@@ -322,11 +314,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, helpkeys.Keys.DeselectAll):
 			m = m.handleDeselectAll()
 		case key.Matches(msg, helpkeys.Keys.Back):
-			if m.listStage > 0 {
-				m.itemsNames = nil
-				m.categorySelected = config.Category{}
-				m.itemsSelected = make(map[int]struct{})
-				m.listStage = m.listStage - 1 // Move to category list
+			if m.currentStage > 0 {
+				m.itemNames = nil
+				m.selectedCategory = config.Category{}
+				m.selectedItems = make(map[int]struct{})
+				m.currentStage = m.currentStage - 1
 			}
 			m.cursor = 0
 			m = m.showInformation()
@@ -335,7 +327,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 	case logsview.DisableLogs:
-		m.listStage = stageItems
+		m.currentStage = stageItems
 		m.logsVisible = false
 	case tea.WindowSizeMsg:
 		m.logsVisible = true
@@ -352,15 +344,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) View() string {
 	var currentList []string
-	switch m.listStage {
+	switch m.currentStage {
 	case stageMenu:
 		currentList = menuItemsTitles
 	case stageCategory:
 		currentList = m.categoryNames
 	case stageItems:
-		currentList = m.itemsNames
+		currentList = m.itemNames
 	case stageInstalling:
-		currentList = m.itemsNames
+		currentList = m.itemNames
 	}
 	var list string
 	for i, choice := range currentList {
@@ -372,9 +364,9 @@ func (m Model) View() string {
 		}
 
 		// Always render checkboxes in items and installing stages
-		if m.listStage == stageItems || m.listStage == stageInstalling {
+		if m.currentStage == stageItems || m.currentStage == stageInstalling {
 			checked := " "
-			if _, ok := m.itemsSelected[i]; ok {
+			if _, ok := m.selectedItems[i]; ok {
 				checked = "x"
 			}
 

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/fcarp10/archutils/internal/scripts"
 	hlp "github.com/fcarp10/archutils/internal/tui/helpkeys"
 	"github.com/fcarp10/archutils/internal/tui/listview"
 
@@ -24,7 +25,7 @@ type mainModel struct {
 func InitialModel() mainModel {
 	return mainModel{
 		help:     help.New(),
-		listView: listview.New(),
+		listView: listview.New(scripts.Runner{}),
 	}
 }
 

@@ -2,6 +2,7 @@ package logsview
 
 import (
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/progress"
@@ -48,17 +49,18 @@ type Model struct {
 	failedItemsNum  int
 	successItemsNum int
 	itemIndex       int
-	itemsLogs       bool
-	itemsNames      []string
-	itemsType       ItemsInstallType
+	itemLogs        bool
+	itemNames       []string
+	itemType        ItemsInstallType
 	logs            string
+	installer       scripts.Installer
 }
 
 func (m Model) Init() tea.Cmd {
 	return m.progressBar.Init()
 }
 
-func NewItems(itemsNames []string) Model {
+func NewItems(itemNames []string, installer scripts.Installer) Model {
 	p := progress.New(
 		progress.WithDefaultGradient(),
 		progress.WithWidth(40),
@@ -69,15 +71,17 @@ func NewItems(itemsNames []string) Model {
 	return Model{
 		spinner:     s,
 		progressBar: p,
-		itemsNames:  itemsNames,
+		itemNames:   itemNames,
+		installer:   installer,
 	}
 }
 
-func NewScript() Model {
+func NewScript(installer scripts.Installer) Model {
 	s := spinner.New()
 	s.Style = spinnerStyle
 	return Model{
-		spinner: s,
+		spinner:   s,
+		installer: installer,
 	}
 }
 
@@ -94,19 +98,19 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
 	case InstallItems:
-		m.itemsLogs = true
-		m.itemsType = ItemsInstallType(msg)
-		return m, func() tea.Msg { return m.installItem(m.itemsType) }
+		m.itemLogs = true
+		m.itemType = ItemsInstallType(msg)
+		return m, func() tea.Msg { return m.installItem(m.itemType) }
 
 	case successInstalledItem:
 		m.logs = fmt.Sprintf("%s %s", CheckMark, strings.Trim(string(msg), "\n"))
 		m.successItemsNum++
-		return m.selectNextItem(m.itemsType)
+		return m.selectNextItem(m.itemType)
 
 	case failedInstalledItem:
 		m.logs = fmt.Sprintf("%s %s", CrossMark, strings.Trim(string(msg), "\n"))
 		m.failedItemsNum++
-		return m.selectNextItem(m.itemsType)
+		return m.selectNextItem(m.itemType)
 
 	case finishedInstallItems:
 		m.itemIndex = 0
@@ -115,7 +119,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, func() tea.Msg { return DisableLogs(msg) }
 
 	case RunningScript:
-		return m, tea.Batch(m.spinner.Tick, func() tea.Msg { return runScript(ScriptType(msg)) })
+		installer := m.installer
+		return m, tea.Batch(m.spinner.Tick, func() tea.Msg { return runScript(installer, ScriptType(msg)) })
 
 	case successScript:
 		m.logs = fmt.Sprintf("%s %s", CheckMark, msg)
@@ -132,8 +137,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 	case progress.FrameMsg:
 		newModel, cmd := m.progressBar.Update(msg)
-		if newModel, ok := newModel.(progress.Model); ok {
-			m.progressBar = newModel
+		if pm, ok := newModel.(progress.Model); ok {
+			m.progressBar = pm
+		} else {
+			log.Printf("warning: progress bar update returned unexpected type %T", newModel)
 		}
 		return m, cmd
 	}
@@ -142,8 +149,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 }
 
 func (m Model) selectNextItem(itemsType ItemsInstallType) (Model, tea.Cmd) {
-	prevPkg := m.itemsNames[m.itemIndex]
-	n := len(m.itemsNames)
+	prevPkg := m.itemNames[m.itemIndex]
+	n := len(m.itemNames)
 	if m.itemIndex >= n-1 { // Installation finished
 		var doneMsg string
 		if m.failedItemsNum > 0 {
@@ -157,11 +164,11 @@ func (m Model) selectNextItem(itemsType ItemsInstallType) (Model, tea.Cmd) {
 			func() tea.Msg { return finishedInstallItems(prevPkg) })
 	}
 	progressCmd := m.progressBar.SetPercent(float64(m.successItemsNum) / float64(n))
-	m.itemIndex++ // Move to next item
+	m.itemIndex++
 	return m, tea.Batch(
 		progressCmd,
-		tea.Printf("%s", m.logs), // Print message from previous item
-		func() tea.Msg { return m.installItem(ItemsInstallType(itemsType)) }, // Install the next item
+		tea.Printf("%s", m.logs),
+		func() tea.Msg { return m.installItem(ItemsInstallType(itemsType)) },
 		m.spinner.Tick,
 	)
 }
@@ -171,9 +178,9 @@ func (m Model) installItem(itemsType ItemsInstallType) tea.Msg {
 	var logs string
 	switch itemsType {
 	case InstallPackages:
-		success, logs = scripts.InstallPackage(m.itemsNames[m.itemIndex])
+		success, logs = m.installer.InstallPackage(m.itemNames[m.itemIndex])
 	case InstallExtensions:
-		success, logs = scripts.InstallVSCodeExtension(m.itemsNames[m.itemIndex])
+		success, logs = m.installer.InstallVSCodeExtension(m.itemNames[m.itemIndex])
 	}
 	if success {
 		return successInstalledItem(logs)
@@ -182,18 +189,18 @@ func (m Model) installItem(itemsType ItemsInstallType) tea.Msg {
 	}
 }
 
-func runScript(script ScriptType) tea.Msg {
+func runScript(installer scripts.Installer, script ScriptType) tea.Msg {
 	var success bool
 	var logs string
 	switch script {
 	case ScriptParu:
-		success, logs = scripts.InstallParu()
+		success, logs = installer.InstallParu()
 	case ScriptAutologin:
-		success, logs = scripts.EnableAutologin()
+		success, logs = installer.EnableAutologin()
 	case ScriptPasswordlessSSH:
-		success, logs = scripts.EnablePasswordlessSSH()
+		success, logs = installer.EnablePasswordlessSSH()
 	case ScriptPasswordlessSudo:
-		success, logs = scripts.EnablePasswordlessSudo()
+		success, logs = installer.EnablePasswordlessSudo()
 	default:
 	}
 	if success {
@@ -205,15 +212,15 @@ func runScript(script ScriptType) tea.Msg {
 
 func (m Model) View() string {
 	var s string
-	if m.itemsLogs {
-		n := len(m.itemsNames)
+	if m.itemLogs {
+		n := len(m.itemNames)
 		w := lipgloss.Width(fmt.Sprintf("%d", n))
 		itemCount := fmt.Sprintf(" %*d/%*d", w, m.successItemsNum, w, n)
 
 		spin := m.spinner.View() + " "
 		progBar := m.progressBar.View()
 
-		itemName := currentPkgNameStyle.Render(m.itemsNames[m.itemIndex])
+		itemName := currentPkgNameStyle.Render(m.itemNames[m.itemIndex])
 		info := lipgloss.NewStyle().Render("Installing " + itemName)
 
 		gap := strings.Repeat(" ", 5)

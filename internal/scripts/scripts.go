@@ -148,7 +148,7 @@ func EnableAutologin() (bool, string) {
 		return false, "Unable to get current user"
 	}
 
-	content, err := c.ConfigFS.ReadFile(c.CONFIG_DIR + "/autologin.conf")
+	content, err := c.ReadFile(c.ConfigDir() + "/autologin.conf")
 	if err != nil {
 		return false, fmt.Sprintf("Failed to read autologin.conf: %v", err)
 	}
@@ -198,9 +198,6 @@ func EnablePasswordlessSSH() (bool, string) {
 	return true, msg1 + " - " + msg2
 }
 
-// EnablePasswordlessSudo configures passwordless sudo for the current user
-// by creating a sudoers drop-in file at /etc/sudoers.d/<username>.
-// This operation will prompt the user for their sudo password once.
 func EnablePasswordlessSudo() (bool, string) {
 	user := os.Getenv("USER")
 	if user == "" {

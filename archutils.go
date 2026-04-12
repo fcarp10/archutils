@@ -15,7 +15,7 @@ var configFS embed.FS
 
 func main() {
 
-	c.ConfigFS = configFS
+	c.Init(configFS)
 
 	p := tea.NewProgram(tui.InitialModel())
 	if _, err := p.Run(); err != nil {

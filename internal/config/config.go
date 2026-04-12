@@ -8,14 +8,34 @@ import (
 	"strings"
 )
 
-var ConfigFS embed.FS
+var configFS embed.FS
 
-var CONFIG_DIR = "configs"
-var PKGS_DIR = CONFIG_DIR + "/packages"
-var EXT_DIR = CONFIG_DIR + "/vscode"
+var configDir = "configs"
+var pkgsDir = configDir + "/packages"
+var extDir = configDir + "/vscode"
+
+func Init(fs embed.FS) {
+	configFS = fs
+}
+
+func PkgsDir() string {
+	return pkgsDir
+}
+
+func ExtDir() string {
+	return extDir
+}
+
+func ConfigDir() string {
+	return configDir
+}
+
+func ReadFile(name string) ([]byte, error) {
+	return configFS.ReadFile(name)
+}
 
 func ReadFilteredLines(filePath string) ([]string, error) {
-	file, err := ConfigFS.Open(filePath)
+	file, err := configFS.Open(filePath)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +71,7 @@ type Category struct {
 
 func ReadCategories(dir string) ([]Category, error) {
 	var categories []Category
-	subFiles, err := ConfigFS.ReadDir(dir)
+	subFiles, err := configFS.ReadDir(dir)
 	if err != nil {
 		return nil, fmt.Errorf("error reading directory %s: %v", dir, err)
 	}
@@ -86,7 +106,7 @@ func ReadCategories(dir string) ([]Category, error) {
 }
 
 func extractSubcategoryName(filePath string) (string, error) {
-	file, err := ConfigFS.Open(filePath)
+	file, err := configFS.Open(filePath)
 	if err != nil {
 		return "", err
 	}
