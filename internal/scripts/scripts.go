@@ -2,13 +2,92 @@ package scripts
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	c "github.com/fcarp10/archutils/internal/config"
 )
+
+var installedExtensionsCache map[string]bool
+var extensionsCacheLoaded bool
+
+func getInstalledExtensions() map[string]bool {
+	if extensionsCacheLoaded {
+		return installedExtensionsCache
+	}
+	installedExtensionsCache = make(map[string]bool)
+	extensionsCacheLoaded = true
+	cmd := exec.Command("codium", "--list-extensions")
+	output, err := cmd.Output()
+	if err != nil {
+		return installedExtensionsCache
+	}
+	for _, line := range strings.Split(string(output), "\n") {
+		ext := strings.TrimSpace(line)
+		if ext != "" {
+			installedExtensionsCache[ext] = true
+		}
+	}
+	return installedExtensionsCache
+}
+
+func IsExtensionInstalled(extension string) bool {
+	fields := strings.Fields(extension)
+	if len(fields) == 0 {
+		return false
+	}
+	return getInstalledExtensions()[fields[0]]
+}
+
+func GetExtensionDescription(extension string) string {
+	fields := strings.Fields(extension)
+	if len(fields) == 0 {
+		return ""
+	}
+	extID := fields[0]
+
+	home, _ := os.UserHomeDir()
+	if home == "" {
+		return ""
+	}
+
+	dirs := []string{
+		filepath.Join(home, ".local", "share", "VSCodium", "extensions"),
+		filepath.Join(home, ".vscode-oss", "extensions"),
+	}
+
+	for _, dir := range dirs {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			dirName := entry.Name()
+			if strings.HasPrefix(dirName, extID+"-") {
+				pkgPath := filepath.Join(dir, dirName, "package.json")
+				data, err := os.ReadFile(pkgPath)
+				if err != nil {
+					continue
+				}
+				var pkg struct {
+					Description string `json:"description"`
+				}
+				if err := json.Unmarshal(data, &pkg); err != nil {
+					continue
+				}
+				return pkg.Description
+			}
+		}
+	}
+	return ""
+}
 
 func InstallParu() (bool, string) {
 
@@ -247,4 +326,11 @@ func EnablePasswordlessSudo() (bool, string) {
 	}
 
 	return true, "Passwordless sudo configured successfully"
+}
+
+func SudoValidateCmd() *exec.Cmd {
+	cmd := exec.Command("sudo", "-v")
+	cmd.Stdin = os.Stdin
+	cmd.Stderr = os.Stderr
+	return cmd
 }

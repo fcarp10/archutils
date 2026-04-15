@@ -3,17 +3,19 @@ package helpkeys
 import "github.com/charmbracelet/bubbles/key"
 
 type keyMap struct {
-	Up          key.Binding
-	Down        key.Binding
-	Enter       key.Binding
-	Install     key.Binding
-	SelectAll   key.Binding
-	DeselectAll key.Binding
-	ConfirmYes  key.Binding
-	ConfirmNo   key.Binding
-	Help        key.Binding
-	Quit        key.Binding
-	Back        key.Binding
+	Up            key.Binding
+	Down          key.Binding
+	Enter         key.Binding
+	Install       key.Binding
+	SelectAll     key.Binding
+	DeselectAll   key.Binding
+	Search        key.Binding
+	ConfirmYes    key.Binding
+	ConfirmNo     key.Binding
+	CancelInstall key.Binding
+	Help          key.Binding
+	Quit          key.Binding
+	Back          key.Binding
 }
 
 var Keys = keyMap{
@@ -45,6 +47,10 @@ var Keys = keyMap{
 		key.WithKeys("A"),
 		key.WithHelp("A", "Deselect all"),
 	),
+	Search: key.NewBinding(
+		key.WithKeys("/"),
+		key.WithHelp("/", "Search"),
+	),
 	ConfirmYes: key.NewBinding(
 		key.WithKeys("y"),
 		key.WithHelp("y", "Confirm install"),
@@ -52,6 +58,10 @@ var Keys = keyMap{
 	ConfirmNo: key.NewBinding(
 		key.WithKeys("n"),
 		key.WithHelp("n", "Cancel install"),
+	),
+	CancelInstall: key.NewBinding(
+		key.WithKeys("c"),
+		key.WithHelp("c", "Cancel install"),
 	),
 	Help: key.NewBinding(
 		key.WithKeys("?"),
@@ -71,7 +81,8 @@ func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.Back},
 		{k.Enter, k.SelectAll, k.DeselectAll},
-		{k.Install, k.ConfirmYes, k.ConfirmNo},
-		{k.Help, k.Quit},
+		{k.Search, k.Install, k.CancelInstall},
+		{k.ConfirmYes, k.ConfirmNo, k.Help},
+		{k.Quit},
 	}
 }

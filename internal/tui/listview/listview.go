@@ -41,6 +41,11 @@ var (
 				Foreground(lipgloss.Color("51"))
 	installedItemStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("241"))
+	searchPromptStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("205")).
+				Bold(true)
+	noMatchStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("241"))
 )
 
 type Model struct {
@@ -58,6 +63,8 @@ type Model struct {
 	logsVisible      bool
 	directory        string
 	installer        scripts.Installer
+	searchMode       bool
+	searchQuery      string
 }
 
 type menuItem struct {
@@ -118,6 +125,24 @@ func (m Model) SelectionCount() (selected, total int) {
 	return len(m.selectedItems), len(m.itemNames)
 }
 
+func (m Model) getFilteredIndices() []int {
+	if m.searchQuery == "" {
+		indices := make([]int, len(m.itemNames))
+		for i := range indices {
+			indices[i] = i
+		}
+		return indices
+	}
+	query := strings.ToLower(m.searchQuery)
+	var indices []int
+	for i, name := range m.itemNames {
+		if strings.Contains(strings.ToLower(name), query) {
+			indices = append(indices, i)
+		}
+	}
+	return indices
+}
+
 func initCategories(dir string) ([]config.Category, []string, error) {
 	categories, err := config.ReadCategories(dir)
 	if err != nil {
@@ -141,18 +166,26 @@ func initializeSelection(items []string) ([]string, map[int]struct{}) {
 }
 
 func (m Model) showInformation() Model {
+	if m.logsView.IsActive() {
+		return m
+	}
 	m.logsVisible = true
 	switch m.currentStage {
 	case stageMenu:
 		m.logsView = logsview.NewInfo(menuItems[m.cursor].description)
 	case stageItems:
-		description := m.selectedCategory.Items[m.cursor].Description
-		if description == "" {
-			description = "No information available for this item"
+		indices := m.getFilteredIndices()
+		if len(indices) == 0 {
+			m.logsView = logsview.NewInfo("No matching items")
+		} else if m.cursor < len(indices) {
+			origIdx := indices[m.cursor]
+			description := m.selectedCategory.Items[origIdx].Description
+			if description == "" {
+				description = "No information available for this item"
+			}
+			m.logsView = logsview.NewInfo(description)
 		}
-		m.logsView = logsview.NewInfo(description)
 	case stageConfirm:
-		// Don't change the logs view - it shows the confirmation dialog
 	default:
 		m.logsVisible = false
 	}
@@ -222,12 +255,17 @@ func (m Model) handleCategoryEnter() (Model, tea.Cmd) {
 				m.categories[m.cursor].Items[i].Description = m.installer.GetPackageDescription(item)
 			}
 		case config.ExtDir():
-			// TO-DO
+			if m.installer.IsExtensionInstalled(item) {
+				m.installedItems[i] = true
+				m.categories[m.cursor].Items[i].Description = m.installer.GetExtensionDescription(item)
+			}
 		}
 	}
 	m.selectedCategory = m.categories[m.cursor]
 	m.cursor = 0
 	m.currentStage = stageItems
+	m.searchMode = false
+	m.searchQuery = ""
 	m = m.showInformation()
 	return m, nil
 }
@@ -236,6 +274,9 @@ func (m Model) handleInstall() (Model, tea.Cmd) {
 	if m.currentStage != stageItems {
 		return m, nil
 	}
+
+	m.searchMode = false
+	m.searchQuery = ""
 
 	if len(m.selectedItems) == 0 {
 		m.logsVisible = true
@@ -265,6 +306,8 @@ func (m Model) handleInstall() (Model, tea.Cmd) {
 
 func (m Model) handleConfirmYes() (Model, tea.Cmd) {
 	m.logsVisible = true
+	m.searchMode = false
+	m.searchQuery = ""
 	var selectedItemNames []string
 	for idx := range m.selectedItems {
 		if idx < len(m.itemNames) {
@@ -287,6 +330,8 @@ func (m Model) handleConfirmYes() (Model, tea.Cmd) {
 
 func (m Model) handleConfirmNo() Model {
 	m.currentStage = stageItems
+	m.searchMode = false
+	m.searchQuery = ""
 	m.logsVisible = false
 	return m
 }
@@ -295,9 +340,9 @@ func (m Model) handleSelectAll() Model {
 	if m.currentStage != stageItems {
 		return m
 	}
-	m.selectedItems = make(map[int]struct{})
-	for i := range m.itemNames {
-		m.selectedItems[i] = struct{}{}
+	indices := m.getFilteredIndices()
+	for _, idx := range indices {
+		m.selectedItems[idx] = struct{}{}
 	}
 	return m
 }
@@ -306,7 +351,10 @@ func (m Model) handleDeselectAll() Model {
 	if m.currentStage != stageItems {
 		return m
 	}
-	m.selectedItems = make(map[int]struct{})
+	indices := m.getFilteredIndices()
+	for _, idx := range indices {
+		delete(m.selectedItems, idx)
+	}
 	return m
 }
 
@@ -326,6 +374,45 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(cmds...)
 		}
 
+		if m.searchMode {
+			switch msg.Type {
+			case tea.KeyRunes:
+				if !msg.Alt {
+					m.searchQuery += string(msg.Runes)
+					m.cursor = 0
+					m = m.showInformation()
+				}
+			case tea.KeyBackspace:
+				if len(m.searchQuery) > 0 {
+					m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
+					m.cursor = 0
+					m = m.showInformation()
+				}
+			case tea.KeyEnter:
+				m.searchMode = false
+			case tea.KeyEscape:
+				m.searchMode = false
+				m.searchQuery = ""
+				m.cursor = 0
+				m = m.showInformation()
+			default:
+				switch {
+				case key.Matches(msg, helpkeys.Keys.Up):
+					if m.cursor > 0 {
+						m.cursor--
+					}
+					m = m.showInformation()
+				case key.Matches(msg, helpkeys.Keys.Down):
+					indices := m.getFilteredIndices()
+					if m.cursor < len(indices)-1 {
+						m.cursor++
+					}
+					m = m.showInformation()
+				}
+			}
+			return m, tea.Batch(cmds...)
+		}
+
 		switch {
 		case key.Matches(msg, helpkeys.Keys.Up):
 			if m.cursor > 0 {
@@ -340,7 +427,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case stageCategory:
 				listMenuLength = len(m.categoryNames)
 			case stageItems:
-				listMenuLength = len(m.itemNames)
+				listMenuLength = len(m.getFilteredIndices())
 			}
 			if m.cursor < listMenuLength-1 {
 				m.cursor++
@@ -355,15 +442,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m, cmd = m.handleCategoryEnter()
 				return m, cmd
 			case stageItems:
-				if _, ok := m.selectedItems[m.cursor]; ok {
-					delete(m.selectedItems, m.cursor)
-				} else {
-					m.selectedItems[m.cursor] = struct{}{}
+				indices := m.getFilteredIndices()
+				if m.cursor < len(indices) {
+					origIdx := indices[m.cursor]
+					if _, ok := m.selectedItems[origIdx]; ok {
+						delete(m.selectedItems, origIdx)
+					} else {
+						m.selectedItems[origIdx] = struct{}{}
+					}
 				}
+			}
+		case key.Matches(msg, helpkeys.Keys.Search):
+			if m.currentStage == stageItems {
+				m.searchMode = true
+				m.searchQuery = ""
+				m.cursor = 0
 			}
 		case key.Matches(msg, helpkeys.Keys.Install):
 			m, cmd = m.handleInstall()
 			cmds = append(cmds, cmd)
+		case key.Matches(msg, helpkeys.Keys.CancelInstall):
+			if m.currentStage == stageInstalling {
+				m.logsView, cmd = m.logsView.Update(logsview.CancelInstall{})
+				cmds = append(cmds, cmd)
+			}
 		case key.Matches(msg, helpkeys.Keys.SelectAll):
 			m = m.handleSelectAll()
 		case key.Matches(msg, helpkeys.Keys.DeselectAll):
@@ -374,6 +476,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.selectedCategory = config.Category{}
 				m.selectedItems = make(map[int]struct{})
 				m.installedItems = make(map[int]bool)
+				m.searchMode = false
+				m.searchQuery = ""
 				m.currentStage = m.currentStage - 1
 			}
 			m.cursor = 0
@@ -384,7 +488,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case logsview.DisableLogs:
 		m.currentStage = stageItems
-		m.logsVisible = false
+		m.searchMode = false
+		m.searchQuery = ""
+		if string(msg) != "" {
+			m.logsVisible = true
+			m.logsView = logsview.NewInfo(string(msg))
+		} else {
+			m.logsVisible = false
+		}
 	case tea.WindowSizeMsg:
 		m.logsVisible = true
 		m = m.showInformation()
@@ -399,43 +510,84 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) View() string {
-	var currentList []string
+	var list string
+
 	switch m.currentStage {
 	case stageMenu:
-		currentList = menuItemsTitles
+		for i, choice := range menuItemsTitles {
+			cursor := " "
+			displayChoice := " " + choice
+			if m.cursor == i {
+				cursor = listItemSelectedStyle.Render("❯")
+				displayChoice = listItemSelectedStyle.Render(displayChoice)
+			}
+			list += fmt.Sprintf("%s%s\n", cursor, displayChoice)
+		}
 	case stageCategory:
-		currentList = m.categoryNames
-	case stageItems, stageConfirm, stageInstalling:
-		currentList = m.itemNames
-	}
-	var list string
-	for i, choice := range currentList {
-		cursor := " "
-		displayChoice := " " + choice
-
-		isItemStage := m.currentStage == stageItems || m.currentStage == stageConfirm || m.currentStage == stageInstalling
-
-		if isItemStage && m.installedItems[i] {
-			displayChoice = installedItemStyle.Render(displayChoice + " ✓")
+		for i, choice := range m.categoryNames {
+			cursor := " "
+			displayChoice := " " + choice
+			if m.cursor == i {
+				cursor = listItemSelectedStyle.Render("❯")
+				displayChoice = listItemSelectedStyle.Render(displayChoice)
+			}
+			list += fmt.Sprintf("%s%s\n", cursor, displayChoice)
 		}
+	case stageItems:
+		indices := m.getFilteredIndices()
+		if len(indices) == 0 && m.searchQuery != "" {
+			list = noMatchStyle.Render("  No matching items")
+		} else {
+			for displayIdx, origIdx := range indices {
+				choice := m.itemNames[origIdx]
+				cursor := " "
+				displayChoice := " " + choice
 
-		if m.cursor == i {
-			cursor = listItemSelectedStyle.Render("❯")
-			displayChoice = listItemSelectedStyle.Render(displayChoice)
+				if m.installedItems[origIdx] {
+					displayChoice = installedItemStyle.Render(displayChoice + " ✓")
+				}
+
+				if m.cursor == displayIdx {
+					cursor = listItemSelectedStyle.Render("❯")
+					displayChoice = listItemSelectedStyle.Render(displayChoice)
+				}
+
+				checked := " "
+				if _, ok := m.selectedItems[origIdx]; ok {
+					checked = "x"
+				}
+				checked = lipgloss.NewStyle().Render(" [" + checked + "]")
+				list += fmt.Sprintf("%s%s%s\n", cursor, checked, displayChoice)
+			}
 		}
+	case stageConfirm, stageInstalling:
+		for i, choice := range m.itemNames {
+			cursor := " "
+			displayChoice := " " + choice
 
-		if isItemStage {
+			if m.installedItems[i] {
+				displayChoice = installedItemStyle.Render(displayChoice + " ✓")
+			}
+
+			if m.cursor == i {
+				cursor = listItemSelectedStyle.Render("❯")
+				displayChoice = listItemSelectedStyle.Render(displayChoice)
+			}
+
 			checked := " "
 			if _, ok := m.selectedItems[i]; ok {
 				checked = "x"
 			}
-
 			checked = lipgloss.NewStyle().Render(" [" + checked + "]")
 			list += fmt.Sprintf("%s%s%s\n", cursor, checked, displayChoice)
-		} else {
-			list += fmt.Sprintf("%s%s\n", cursor, displayChoice)
 		}
 	}
+
+	if m.searchMode {
+		prompt := searchPromptStyle.Render("/" + m.searchQuery + "▎")
+		list = prompt + "\n" + list
+	}
+
 	list = strings.TrimRight(list, "\n")
 	var s string
 	if m.logsVisible {

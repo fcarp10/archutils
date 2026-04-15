@@ -18,6 +18,7 @@ var (
 	currentPkgNameStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("211"))
 	doneStyle           = lipgloss.NewStyle().Margin(1, 0)
 	spinnerStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("63"))
+	errorCountStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("01"))
 )
 
 type DisableLogs string
@@ -30,6 +31,8 @@ type InstallItems ItemsInstallType
 type successInstalledItem string
 type failedInstalledItem string
 type finishedInstallItems string
+type CancelInstall struct{}
+type SudoValidated struct{ err error }
 
 const (
 	ScriptParu ScriptType = iota
@@ -54,10 +57,19 @@ type Model struct {
 	itemType        ItemsInstallType
 	logs            string
 	installer       scripts.Installer
+	failedItemLogs  []string
+	cancelRequested bool
+	pendingScript   ScriptType
+	validatingSudo  bool
+	scriptRunning   bool
 }
 
 func (m Model) Init() tea.Cmd {
 	return m.progressBar.Init()
+}
+
+func (m Model) IsActive() bool {
+	return m.validatingSudo || m.scriptRunning || m.itemLogs
 }
 
 func NewItems(itemNames []string, installer scripts.Installer) Model {
@@ -100,7 +112,26 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case InstallItems:
 		m.itemLogs = true
 		m.itemType = ItemsInstallType(msg)
+		if ItemsInstallType(msg) == InstallPackages {
+			m.validatingSudo = true
+			return m, tea.ExecProcess(m.installer.SudoValidateCmd(), func(err error) tea.Msg {
+				return SudoValidated{err: err}
+			})
+		}
 		return m, func() tea.Msg { return m.installItem(m.itemType) }
+
+	case SudoValidated:
+		m.validatingSudo = false
+		if msg.err != nil {
+			m.itemLogs = false
+			return m, func() tea.Msg { return DisableLogs("Sudo authentication failed: password is required") }
+		}
+		if m.itemLogs {
+			return m, func() tea.Msg { return m.installItem(m.itemType) }
+		}
+		m.scriptRunning = true
+		installer := m.installer
+		return m, tea.Batch(m.spinner.Tick, func() tea.Msg { return runScript(installer, m.pendingScript) })
 
 	case successInstalledItem:
 		m.logs = fmt.Sprintf("%s %s", CheckMark, strings.Trim(string(msg), "\n"))
@@ -110,23 +141,42 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case failedInstalledItem:
 		m.logs = fmt.Sprintf("%s %s", CrossMark, strings.Trim(string(msg), "\n"))
 		m.failedItemsNum++
+		m.failedItemLogs = append(m.failedItemLogs, m.logs)
 		return m.selectNextItem(m.itemType)
 
 	case finishedInstallItems:
+		var summary string
+		if len(m.failedItemLogs) > 0 {
+			summary = "\nFailed items:\n"
+			for _, errLog := range m.failedItemLogs {
+				summary += "  " + errLog + "\n"
+			}
+		}
 		m.itemIndex = 0
 		m.failedItemsNum = 0
 		m.successItemsNum = 0
-		return m, func() tea.Msg { return DisableLogs(msg) }
+		m.cancelRequested = false
+		m.failedItemLogs = nil
+		return m, func() tea.Msg { return DisableLogs(summary) }
+
+	case CancelInstall:
+		m.cancelRequested = true
+		return m, nil
 
 	case RunningScript:
-		installer := m.installer
-		return m, tea.Batch(m.spinner.Tick, func() tea.Msg { return runScript(installer, ScriptType(msg)) })
+		m.pendingScript = ScriptType(msg)
+		m.validatingSudo = true
+		return m, tea.ExecProcess(m.installer.SudoValidateCmd(), func(err error) tea.Msg {
+			return SudoValidated{err: err}
+		})
 
 	case successScript:
+		m.scriptRunning = false
 		m.logs = fmt.Sprintf("%s %s", CheckMark, msg)
 		return m, nil
 
 	case failedScript:
+		m.scriptRunning = false
 		m.logs = fmt.Sprintf("%s %s", CrossMark, msg)
 		return m, nil
 
@@ -151,10 +201,16 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 func (m Model) selectNextItem(itemsType ItemsInstallType) (Model, tea.Cmd) {
 	prevPkg := m.itemNames[m.itemIndex]
 	n := len(m.itemNames)
-	if m.itemIndex >= n-1 { // Installation finished
+
+	isFinished := m.itemIndex >= n-1
+	isCancelled := m.cancelRequested
+
+	if isCancelled || isFinished {
 		var doneMsg string
-		if m.failedItemsNum > 0 {
-			doneMsg = doneStyle.Render(fmt.Sprintf("Done! %d items installed, %d items failed.", n-m.failedItemsNum, m.failedItemsNum))
+		if isCancelled {
+			doneMsg = doneStyle.Render(fmt.Sprintf("Cancelled! %d/%d items installed.", m.successItemsNum, n))
+		} else if m.failedItemsNum > 0 {
+			doneMsg = doneStyle.Render(fmt.Sprintf("Done! %d items installed, %d items failed.", m.successItemsNum, m.failedItemsNum))
 		} else {
 			doneMsg = doneStyle.Render(fmt.Sprintf("Done! All %d items installed successfully.", n))
 		}
@@ -190,6 +246,9 @@ func (m Model) installItem(itemsType ItemsInstallType) tea.Msg {
 }
 
 func runScript(installer scripts.Installer, script ScriptType) tea.Msg {
+	if installer == nil {
+		return failedScript("Installer not available")
+	}
 	var success bool
 	var logs string
 	switch script {
@@ -212,7 +271,10 @@ func runScript(installer scripts.Installer, script ScriptType) tea.Msg {
 
 func (m Model) View() string {
 	var s string
-	if m.itemLogs {
+	if m.validatingSudo {
+		spin := m.spinner.View() + " "
+		s = spin + "Authenticating with sudo, please enter your password..."
+	} else if m.itemLogs {
 		n := len(m.itemNames)
 		w := lipgloss.Width(fmt.Sprintf("%d", n))
 		itemCount := fmt.Sprintf(" %*d/%*d", w, m.successItemsNum, w, n)
@@ -225,6 +287,11 @@ func (m Model) View() string {
 
 		gap := strings.Repeat(" ", 5)
 		s = spin + info + gap + progBar + itemCount
+
+		if m.failedItemsNum > 0 {
+			failInfo := errorCountStyle.Render(fmt.Sprintf(" (%d failed)", m.failedItemsNum))
+			s += failInfo
+		}
 	} else if m.logs == "" {
 		spin := m.spinner.View() + " "
 		s = spin + "Running script, please wait..."
