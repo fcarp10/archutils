@@ -30,7 +30,7 @@ cameractrls
 
 ## GIT
 git-delta
-lazygit
+# lazygit
 
 
 ## File manipulation

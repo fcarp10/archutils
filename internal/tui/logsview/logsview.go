@@ -118,7 +118,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 				return SudoValidated{err: err}
 			})
 		}
-		return m, func() tea.Msg { return m.installItem(m.itemType) }
+		return m, tea.Batch(
+			m.spinner.Tick,
+			func() tea.Msg { return m.installItem(m.itemType) },
+		)
 
 	case SudoValidated:
 		m.validatingSudo = false
@@ -127,7 +130,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			return m, func() tea.Msg { return DisableLogs("Sudo authentication failed: password is required") }
 		}
 		if m.itemLogs {
-			return m, func() tea.Msg { return m.installItem(m.itemType) }
+			return m, tea.Batch(
+				m.spinner.Tick,
+				func() tea.Msg { return m.installItem(m.itemType) },
+			)
 		}
 		m.scriptRunning = true
 		installer := m.installer

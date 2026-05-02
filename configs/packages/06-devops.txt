@@ -1,7 +1,7 @@
 ### DevOps Tools
 docker [docker]
 docker-compose
-lazydocker
+# lazydocker
 # act
 # ansible
 # bruno-bin

@@ -44,13 +44,17 @@ func (m mainModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		default:
 			var updated tea.Model
 			updated, cmd = m.listView.Update(msg)
-			m.listView = updated.(listview.Model)
+			if lv, ok := updated.(listview.Model); ok {
+				m.listView = lv
+			}
 			cmds = append(cmds, cmd)
 		}
 	default:
 		var updated tea.Model
 		updated, cmd = m.listView.Update(msg)
-		m.listView = updated.(listview.Model)
+		if lv, ok := updated.(listview.Model); ok {
+			m.listView = lv
+		}
 		cmds = append(cmds, cmd)
 	}
 	return m, tea.Batch(cmds...)
