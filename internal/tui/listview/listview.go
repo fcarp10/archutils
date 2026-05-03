@@ -13,6 +13,7 @@ import (
 	"github.com/fcarp10/archutils/internal/tui/logsview"
 )
 
+// Stage identifiers for the UI state machine.
 const (
 	stageMenu = iota
 	stageCategory
@@ -21,6 +22,7 @@ const (
 	stageInstalling
 )
 
+// Menu option indices.
 const (
 	menuPackages = iota
 	menuInstallParu
@@ -30,6 +32,7 @@ const (
 	menuPasswordlessSudo
 )
 
+// Styling shared across all stages.
 var (
 	listStyle = lipgloss.NewStyle().
 			Align(lipgloss.Left, lipgloss.Center).
@@ -48,6 +51,7 @@ var (
 			Foreground(lipgloss.Color("241"))
 )
 
+// Model is the main list view model that manages all UI stages.
 type Model struct {
 	width            int
 	height           int
@@ -67,44 +71,7 @@ type Model struct {
 	searchQuery      string
 }
 
-type menuItem struct {
-	title       string
-	description string
-}
-
-var menuItems = []menuItem{
-	{
-		title:       "Arch Linux Packages",
-		description: "A categorized collection of Arch Linux packages",
-	},
-	{
-		title:       "Install Paru",
-		description: "Paru AUR helper - a package manager for the Arch Linux community repository",
-	},
-	{
-		title:       "VSCode Extensions",
-		description: "A collection of VSCode extensions",
-	},
-	{
-		title:       "Enable Autologin",
-		description: "Enable and configure autologin for the current user",
-	},
-	{
-		title:       "Enable Passwordless SSH",
-		description: "Disable SSH password authentication and enable/restart SSH service",
-	},
-	{
-		title:       "Configure Passwordless Sudo",
-		description: "Configure passwordless sudo for the current user (will prompt for password once)",
-	},
-}
-
-var menuItemsTitles []string
-
-func (m Model) Init() tea.Cmd {
-	return m.logsView.Init()
-}
-
+// New creates a new Model starting at the main menu.
 func New(installer scripts.Installer) Model {
 	menuItemsTitles = make([]string, len(menuItems))
 	for i, item := range menuItems {
@@ -118,6 +85,12 @@ func New(installer scripts.Installer) Model {
 	}
 }
 
+func (m Model) Init() tea.Cmd {
+	return m.logsView.Init()
+}
+
+// SelectionCount returns the number of selected items and total items,
+// or (-1, -1) if the current stage does not show selections.
 func (m Model) SelectionCount() (selected, total int) {
 	if m.currentStage != stageItems && m.currentStage != stageConfirm && m.currentStage != stageInstalling {
 		return -1, -1
@@ -192,182 +165,7 @@ func (m Model) showInformation() Model {
 	return m
 }
 
-func (m Model) handleMenuEnter() (Model, tea.Cmd) {
-	var cmd tea.Cmd
-	var cmds []tea.Cmd
-
-	switch m.cursor {
-	case menuInstallParu:
-		m.logsVisible = true
-		m.logsView = logsview.NewScript(m.installer)
-		m.logsView, cmd = m.logsView.Update(logsview.RunningScript(logsview.ScriptParu))
-		cmds = append(cmds, cmd)
-	case menuAutologin:
-		m.logsVisible = true
-		m.logsView = logsview.NewScript(m.installer)
-		m.logsView, cmd = m.logsView.Update(logsview.RunningScript(logsview.ScriptAutologin))
-		cmds = append(cmds, cmd)
-	case menuPasswordlessSSH:
-		m.logsVisible = true
-		m.logsView = logsview.NewScript(m.installer)
-		m.logsView, cmd = m.logsView.Update(logsview.RunningScript(logsview.ScriptPasswordlessSSH))
-		cmds = append(cmds, cmd)
-	case menuPasswordlessSudo:
-		m.logsVisible = true
-		m.logsView = logsview.NewScript(m.installer)
-		m.logsView, cmd = m.logsView.Update(logsview.RunningScript(logsview.ScriptPasswordlessSudo))
-		cmds = append(cmds, cmd)
-	default:
-		switch m.cursor {
-		case menuPackages:
-			m.directory = config.PkgsDir()
-		case menuVSCodeExtensions:
-			m.directory = config.ExtDir()
-		}
-		var err error
-		m.categories, m.categoryNames, err = initCategories(m.directory)
-		if err != nil {
-			m.logsVisible = true
-			m.logsView = logsview.NewInfo(fmt.Sprintf("Error: %v", err))
-			return m, nil
-		}
-		m.cursor = 0
-		m.currentStage = stageCategory
-		m = m.showInformation()
-		return m, nil
-	}
-	return m, tea.Batch(cmds...)
-}
-
-func (m Model) handleCategoryEnter() (Model, tea.Cmd) {
-	var names []string
-	for _, item := range m.categories[m.cursor].Items {
-		names = append(names, item.Name)
-	}
-	m.itemNames = names
-	m.itemNames, m.selectedItems = initializeSelection(names)
-	m.installedItems = make(map[int]bool)
-
-	switch m.directory {
-	case config.PkgsDir():
-		installed := m.installer.GetInstalledPackages()
-		for i, item := range m.itemNames {
-			fields := strings.Fields(item)
-			if len(fields) == 0 {
-				continue
-			}
-			pkgName := fields[0]
-			if desc, ok := installed[pkgName]; ok {
-				m.installedItems[i] = true
-				m.categories[m.cursor].Items[i].Description = desc
-			}
-		}
-	case config.ExtDir():
-		for i, item := range m.itemNames {
-			if m.installer.IsExtensionInstalled(item) {
-				m.installedItems[i] = true
-				m.categories[m.cursor].Items[i].Description = m.installer.GetExtensionDescription(item)
-			}
-		}
-	}
-
-	m.selectedCategory = m.categories[m.cursor]
-	m.cursor = 0
-	m.currentStage = stageItems
-	m.searchMode = false
-	m.searchQuery = ""
-	m = m.showInformation()
-	return m, nil
-}
-
-func (m Model) handleInstall() (Model, tea.Cmd) {
-	if m.currentStage != stageItems {
-		return m, nil
-	}
-
-	m.searchMode = false
-	m.searchQuery = ""
-
-	if len(m.selectedItems) == 0 {
-		m.logsVisible = true
-		m.logsView = logsview.NewInfo("No items selected. Select items with space/enter.")
-		return m, nil
-	}
-
-	m.currentStage = stageConfirm
-	m.logsVisible = true
-
-	var selectedList []string
-	for idx := range m.selectedItems {
-		if idx < len(m.itemNames) {
-			selectedList = append(selectedList, m.itemNames[idx])
-		}
-	}
-
-	confirmMsg := fmt.Sprintf("Confirm installation of %d item(s):\n\n", len(selectedList))
-	for _, name := range selectedList {
-		confirmMsg += "  • " + name + "\n"
-	}
-	confirmMsg += "\n  y: Confirm   n: Cancel"
-
-	m.logsView = logsview.NewInfo(confirmMsg)
-	return m, nil
-}
-
-func (m Model) handleConfirmYes() (Model, tea.Cmd) {
-	m.logsVisible = true
-	m.searchMode = false
-	m.searchQuery = ""
-	var selectedItemNames []string
-	for idx := range m.selectedItems {
-		if idx < len(m.itemNames) {
-			selectedItemNames = append(selectedItemNames, m.itemNames[idx])
-		}
-	}
-	m.currentStage = stageInstalling
-	var installType logsview.ItemsInstallType
-	switch m.directory {
-	case config.PkgsDir():
-		installType = logsview.InstallPackages
-	case config.ExtDir():
-		installType = logsview.InstallExtensions
-	}
-	m.logsView = logsview.NewItems(selectedItemNames, m.installer)
-	var cmd tea.Cmd
-	m.logsView, cmd = m.logsView.Update(logsview.InstallItems(installType))
-	return m, cmd
-}
-
-func (m Model) handleConfirmNo() Model {
-	m.currentStage = stageItems
-	m.searchMode = false
-	m.searchQuery = ""
-	m.logsVisible = false
-	return m
-}
-
-func (m Model) handleSelectAll() Model {
-	if m.currentStage != stageItems {
-		return m
-	}
-	indices := m.getFilteredIndices()
-	for _, idx := range indices {
-		m.selectedItems[idx] = struct{}{}
-	}
-	return m
-}
-
-func (m Model) handleDeselectAll() Model {
-	if m.currentStage != stageItems {
-		return m
-	}
-	indices := m.getFilteredIndices()
-	for _, idx := range indices {
-		delete(m.selectedItems, idx)
-	}
-	return m
-}
-
+// Update dispatches messages to the appropriate stage handler.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	var cmds []tea.Cmd
@@ -385,42 +183,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		if m.searchMode {
-			switch msg.Type {
-			case tea.KeyRunes:
-				if !msg.Alt {
-					m.searchQuery += string(msg.Runes)
-					m.cursor = 0
-					m = m.showInformation()
-				}
-			case tea.KeyBackspace:
-				if len(m.searchQuery) > 0 {
-					m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
-					m.cursor = 0
-					m = m.showInformation()
-				}
-			case tea.KeyEnter:
-				m.searchMode = false
-			case tea.KeyEscape:
-				m.searchMode = false
-				m.searchQuery = ""
-				m.cursor = 0
-				m = m.showInformation()
-			default:
-				switch {
-				case key.Matches(msg, helpkeys.Keys.Up):
-					if m.cursor > 0 {
-						m.cursor--
-					}
-					m = m.showInformation()
-				case key.Matches(msg, helpkeys.Keys.Down):
-					indices := m.getFilteredIndices()
-					if m.cursor < len(indices)-1 {
-						m.cursor++
-					}
-					m = m.showInformation()
-				}
-			}
-			return m, tea.Batch(cmds...)
+			return m.handleSearchInput(msg), nil
 		}
 
 		switch {
@@ -519,78 +282,58 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+func (m Model) handleSearchInput(msg tea.KeyMsg) Model {
+	switch msg.Type {
+	case tea.KeyRunes:
+		if !msg.Alt {
+			m.searchQuery += string(msg.Runes)
+			m.cursor = 0
+			m = m.showInformation()
+		}
+	case tea.KeyBackspace:
+		if len(m.searchQuery) > 0 {
+			m.searchQuery = m.searchQuery[:len(m.searchQuery)-1]
+			m.cursor = 0
+			m = m.showInformation()
+		}
+	case tea.KeyEnter:
+		m.searchMode = false
+	case tea.KeyEscape:
+		m.searchMode = false
+		m.searchQuery = ""
+		m.cursor = 0
+		m = m.showInformation()
+	default:
+		switch {
+		case key.Matches(msg, helpkeys.Keys.Up):
+			if m.cursor > 0 {
+				m.cursor--
+			}
+			m = m.showInformation()
+		case key.Matches(msg, helpkeys.Keys.Down):
+			indices := m.getFilteredIndices()
+			if m.cursor < len(indices)-1 {
+				m.cursor++
+			}
+			m = m.showInformation()
+		}
+	}
+	return m
+}
+
+// View renders the current stage.
 func (m Model) View() string {
 	var list string
 
 	switch m.currentStage {
 	case stageMenu:
-		for i, choice := range menuItemsTitles {
-			cursor := " "
-			displayChoice := " " + choice
-			if m.cursor == i {
-				cursor = listItemSelectedStyle.Render("❯")
-				displayChoice = listItemSelectedStyle.Render(displayChoice)
-			}
-			list += fmt.Sprintf("%s%s\n", cursor, displayChoice)
-		}
+		list = m.viewMenu()
 	case stageCategory:
-		for i, choice := range m.categoryNames {
-			cursor := " "
-			displayChoice := " " + choice
-			if m.cursor == i {
-				cursor = listItemSelectedStyle.Render("❯")
-				displayChoice = listItemSelectedStyle.Render(displayChoice)
-			}
-			list += fmt.Sprintf("%s%s\n", cursor, displayChoice)
-		}
+		list = m.viewCategory()
 	case stageItems:
-		indices := m.getFilteredIndices()
-		if len(indices) == 0 && m.searchQuery != "" {
-			list = noMatchStyle.Render("  No matching items")
-		} else {
-			for displayIdx, origIdx := range indices {
-				choice := m.itemNames[origIdx]
-				cursor := " "
-				displayChoice := " " + choice
-
-				if m.installedItems[origIdx] {
-					displayChoice = installedItemStyle.Render(displayChoice + " ✓")
-				}
-
-				if m.cursor == displayIdx {
-					cursor = listItemSelectedStyle.Render("❯")
-					displayChoice = listItemSelectedStyle.Render(displayChoice)
-				}
-
-				checked := " "
-				if _, ok := m.selectedItems[origIdx]; ok {
-					checked = "x"
-				}
-				checked = lipgloss.NewStyle().Render(" [" + checked + "]")
-				list += fmt.Sprintf("%s%s%s\n", cursor, checked, displayChoice)
-			}
-		}
+		list = m.viewItems()
 	case stageConfirm, stageInstalling:
-		for i, choice := range m.itemNames {
-			cursor := " "
-			displayChoice := " " + choice
-
-			if m.installedItems[i] {
-				displayChoice = installedItemStyle.Render(displayChoice + " ✓")
-			}
-
-			if m.cursor == i {
-				cursor = listItemSelectedStyle.Render("❯")
-				displayChoice = listItemSelectedStyle.Render(displayChoice)
-			}
-
-			checked := " "
-			if _, ok := m.selectedItems[i]; ok {
-				checked = "x"
-			}
-			checked = lipgloss.NewStyle().Render(" [" + checked + "]")
-			list += fmt.Sprintf("%s%s%s\n", cursor, checked, displayChoice)
-		}
+		list = m.viewConfirmInstalling()
 	}
 
 	if m.searchMode {
