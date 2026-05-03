@@ -25,66 +25,65 @@ func testFS() fstest.MapFS {
 	}
 }
 
-func TestReadFilteredLines(t *testing.T) {
-	fs := testFS()
-	configFS = fs
-
-	lines, err := ReadFilteredLines("configs/packages/01-wm.txt")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// ReadFilteredLines skips empty lines and lines starting with ## (including ### headers).
-	// It keeps # (disabled) items and regular package names.
-	expected := []string{"# hyprland", "niri", "waybar", "mako"}
-	if len(lines) != len(expected) {
-		t.Fatalf("expected %d lines, got %d: %v", len(expected), len(lines), lines)
-	}
-	for i, want := range expected {
-		if lines[i] != want {
-			t.Errorf("line %d: expected %q, got %q", i, want, lines[i])
-		}
-	}
-}
-
-func TestReadFilteredLines_FileNotFound(t *testing.T) {
-	fs := testFS()
-	configFS = fs
-
-	_, err := ReadFilteredLines("configs/packages/nonexistent.txt")
-	if err == nil {
-		t.Fatal("expected error for nonexistent file, got nil")
-	}
-}
-
-func TestExtractSubcategoryName(t *testing.T) {
+func TestReadCategoryFile(t *testing.T) {
 	fs := testFS()
 	configFS = fs
 
 	tests := []struct {
-		filePath string
-		want     string
-		wantErr  bool
+		filePath  string
+		wantName  string
+		wantItems []string
 	}{
-		{"configs/packages/01-wm.txt", "Window Managers", false},
-		{"configs/packages/02-cli.txt", "CLI Tools", false},
-		{"configs/packages/03-empty.txt", "Empty Category", false},
-		{"configs/packages/04-no-header.txt", "", true},
+		{
+			filePath:  "configs/packages/01-wm.txt",
+			wantName:  "Window Managers",
+			wantItems: []string{"# hyprland", "niri", "waybar", "mako"},
+		},
+		{
+			filePath:  "configs/packages/02-cli.txt",
+			wantName:  "CLI Tools",
+			wantItems: []string{"git-delta", "zsh", "fish"},
+		},
+		{
+			filePath:  "configs/packages/03-empty.txt",
+			wantName:  "Empty Category",
+			wantItems: nil,
+		},
+		{
+			filePath:  "configs/packages/04-no-header.txt",
+			wantName:  "",
+			wantItems: []string{"pkg1", "pkg2"},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.filePath, func(t *testing.T) {
-			got, err := extractSubcategoryName(tt.filePath)
-			if tt.wantErr && err == nil {
-				t.Errorf("expected error, got nil")
+			name, items, err := readCategoryFile(tt.filePath)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
 			}
-			if !tt.wantErr && err != nil {
-				t.Errorf("unexpected error: %v", err)
+			if name != tt.wantName {
+				t.Errorf("name: expected %q, got %q", tt.wantName, name)
 			}
-			if got != tt.want {
-				t.Errorf("expected %q, got %q", tt.want, got)
+			if len(items) != len(tt.wantItems) {
+				t.Fatalf("items: expected %d, got %d: %v", len(tt.wantItems), len(items), items)
+			}
+			for i, want := range tt.wantItems {
+				if items[i] != want {
+					t.Errorf("item %d: expected %q, got %q", i, want, items[i])
+				}
 			}
 		})
+	}
+}
+
+func TestReadCategoryFile_NotFound(t *testing.T) {
+	fs := testFS()
+	configFS = fs
+
+	_, _, err := readCategoryFile("configs/packages/nonexistent.txt")
+	if err == nil {
+		t.Fatal("expected error for nonexistent file, got nil")
 	}
 }
 
@@ -128,12 +127,12 @@ func TestReadCategories(t *testing.T) {
 		t.Errorf("expected 0 items, got %d", len(categories[2].Items))
 	}
 
-	// Category 4: No header — extractSubcategoryName fails, so Name is empty and Items are empty
+	// Category 4: No header — name is empty but items are still read in single pass
 	if categories[3].Name != "" {
 		t.Errorf("expected empty name, got %q", categories[3].Name)
 	}
-	if len(categories[3].Items) != 0 {
-		t.Errorf("expected 0 items, got %d", len(categories[3].Items))
+	if len(categories[3].Items) != 2 {
+		t.Errorf("expected 2 items, got %d", len(categories[3].Items))
 	}
 }
 
