@@ -4,18 +4,29 @@ import (
 	"bufio"
 	"embed"
 	"fmt"
+	"io"
+	"io/fs"
 	"path/filepath"
 	"strings"
 )
 
-var configFS embed.FS
+// fsys is the filesystem interface used to read embedded and test configs.
+// Both embed.FS and fstest.MapFS satisfy this interface.
+type fsys interface {
+	Open(name string) (fs.File, error)
+	ReadDir(name string) ([]fs.DirEntry, error)
+}
+
+var configFS fsys
 
 var configDir = "configs"
 var pkgsDir = configDir + "/packages"
 var extDir = configDir + "/vscode"
 
-func Init(fs embed.FS) {
-	configFS = fs
+// Init sets the filesystem used for reading configuration files.
+// In production this is an embed.FS; in tests it can be a fstest.MapFS.
+func Init(f embed.FS) {
+	configFS = f
 }
 
 func PkgsDir() string {
@@ -31,7 +42,12 @@ func ConfigDir() string {
 }
 
 func ReadFile(name string) ([]byte, error) {
-	return configFS.ReadFile(name)
+	f, err := configFS.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(f)
 }
 
 func ReadFilteredLines(filePath string) ([]string, error) {
