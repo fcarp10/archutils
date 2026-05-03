@@ -32,6 +32,13 @@ const (
 	menuPasswordlessSudo
 )
 
+// Minimum terminal dimensions for usable layout.
+const (
+	minWidth     = 50
+	minHeight    = 10
+	maxListWidth = 36 // Max content width for left pane (40 total with border/padding)
+)
+
 // Styling shared across all stages.
 var (
 	listStyle = lipgloss.NewStyle().
@@ -49,6 +56,16 @@ var (
 				Bold(true)
 	noMatchStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("241"))
+	scrollUpStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("240")).
+			Italic(true)
+	scrollDownStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("240")).
+			Italic(true)
+	tooSmallStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("196")).
+			Bold(true).
+			Align(lipgloss.Center, lipgloss.Center)
 )
 
 // Model is the main list view model that manages all UI stages.
@@ -163,6 +180,39 @@ func (m Model) showInformation() Model {
 		m.logsVisible = false
 	}
 	return m
+}
+
+// visibleRange returns the start and end indices (exclusive) of items to display
+// based on the terminal height and cursor position. It keeps the cursor centered
+// when possible.
+func (m Model) visibleRange(totalItems int) (start, end int) {
+	if totalItems == 0 || m.height == 0 {
+		return 0, totalItems
+	}
+	// Reserve 2 lines for border/padding, 1 for search prompt, 2 for scroll indicators
+	overhead := 5
+	visibleLines := m.height - overhead
+	if visibleLines < 3 {
+		visibleLines = 3
+	}
+	if totalItems <= visibleLines {
+		return 0, totalItems
+	}
+	// Center cursor in the visible window
+	half := visibleLines / 2
+	start = m.cursor - half
+	if start < 0 {
+		start = 0
+	}
+	end = start + visibleLines
+	if end > totalItems {
+		end = totalItems
+		start = end - visibleLines
+		if start < 0 {
+			start = 0
+		}
+	}
+	return start, end
 }
 
 // Update dispatches messages to the appropriate stage handler.
@@ -323,6 +373,14 @@ func (m Model) handleSearchInput(msg tea.KeyMsg) Model {
 
 // View renders the current stage.
 func (m Model) View() string {
+	// Check minimum terminal size
+	if m.width > 0 && m.width < minWidth {
+		return tooSmallStyle.Render(fmt.Sprintf("Terminal too narrow: %d cols (min %d)", m.width, minWidth))
+	}
+	if m.height > 0 && m.height < minHeight {
+		return tooSmallStyle.Render(fmt.Sprintf("Terminal too short: %d rows (min %d)", m.height, minHeight))
+	}
+
 	var list string
 
 	switch m.currentStage {
@@ -342,11 +400,34 @@ func (m Model) View() string {
 	}
 
 	list = strings.TrimRight(list, "\n")
+
 	var s string
-	if m.logsVisible {
-		s = lipgloss.JoinHorizontal(lipgloss.Top, listStyle.Render(list), logsStyle.Render(m.logsView.View()))
+	if m.logsVisible && m.width > 0 {
+		// Left pane: capped at maxListWidth, right pane: remaining space
+		listWidth := m.width*60/100 - 4
+		if listWidth > maxListWidth {
+			listWidth = maxListWidth
+		}
+		logsWidth := m.width - listWidth - 8 // subtract both panes' border/padding
+		if listWidth < 26 {
+			listWidth = 26
+		}
+		if logsWidth < 16 {
+			logsWidth = 16
+		}
+		// Pad content to desired width first (without border), then add border
+		paddedList := lipgloss.NewStyle().Width(listWidth).Render(list)
+		paddedLogs := lipgloss.NewStyle().Width(logsWidth).Render(m.logsView.View())
+		s = lipgloss.JoinHorizontal(lipgloss.Top, listStyle.Render(paddedList), logsStyle.Render(paddedLogs))
+	} else if m.width > 0 {
+		paddedList := lipgloss.NewStyle().Width(m.width - 4).Render(list)
+		s = listStyle.Render(paddedList)
 	} else {
-		s = listStyle.Render(list)
+		if m.logsVisible {
+			s = lipgloss.JoinHorizontal(lipgloss.Top, listStyle.Render(list), logsStyle.Render(m.logsView.View()))
+		} else {
+			s = listStyle.Render(list)
+		}
 	}
 	return s
 }

@@ -12,7 +12,14 @@ import (
 
 func (m Model) viewConfirmInstalling() string {
 	var list string
-	for i, choice := range m.itemNames {
+	total := len(m.itemNames)
+	start, end := m.visibleRange(total)
+
+	if start > 0 {
+		list += scrollUpStyle.Render(fmt.Sprintf("  ▲ %d more", start)) + "\n"
+	}
+	for i := start; i < end; i++ {
+		choice := m.itemNames[i]
 		cursor := " "
 		displayChoice := " " + choice
 
@@ -31,6 +38,9 @@ func (m Model) viewConfirmInstalling() string {
 		}
 		checked = lipgloss.NewStyle().Render(" [" + checked + "]")
 		list += fmt.Sprintf("%s%s%s\n", cursor, checked, displayChoice)
+	}
+	if end < total {
+		list += scrollDownStyle.Render(fmt.Sprintf("  ▼ %d more", total-end)) + "\n"
 	}
 	return strings.TrimRight(list, "\n")
 }

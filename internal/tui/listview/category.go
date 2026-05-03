@@ -10,7 +10,14 @@ import (
 
 func (m Model) viewCategory() string {
 	var list string
-	for i, choice := range m.categoryNames {
+	total := len(m.categoryNames)
+	start, end := m.visibleRange(total)
+
+	if start > 0 {
+		list += scrollUpStyle.Render(fmt.Sprintf("  ▲ %d more", start)) + "\n"
+	}
+	for i := start; i < end; i++ {
+		choice := m.categoryNames[i]
 		cursor := " "
 		displayChoice := " " + choice
 		if m.cursor == i {
@@ -18,6 +25,9 @@ func (m Model) viewCategory() string {
 			displayChoice = listItemSelectedStyle.Render(displayChoice)
 		}
 		list += fmt.Sprintf("%s%s\n", cursor, displayChoice)
+	}
+	if end < total {
+		list += scrollDownStyle.Render(fmt.Sprintf("  ▼ %d more", total-end)) + "\n"
 	}
 	return list
 }

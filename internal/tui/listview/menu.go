@@ -44,7 +44,14 @@ var menuItemsTitles []string
 
 func (m Model) viewMenu() string {
 	var list string
-	for i, choice := range menuItemsTitles {
+	total := len(menuItemsTitles)
+	start, end := m.visibleRange(total)
+
+	if start > 0 {
+		list += scrollUpStyle.Render(fmt.Sprintf("  ▲ %d more", start)) + "\n"
+	}
+	for i := start; i < end; i++ {
+		choice := menuItemsTitles[i]
 		cursor := " "
 		displayChoice := " " + choice
 		if m.cursor == i {
@@ -52,6 +59,9 @@ func (m Model) viewMenu() string {
 			displayChoice = listItemSelectedStyle.Render(displayChoice)
 		}
 		list += fmt.Sprintf("%s%s\n", cursor, displayChoice)
+	}
+	if end < total {
+		list += scrollDownStyle.Render(fmt.Sprintf("  ▼ %d more", total-end)) + "\n"
 	}
 	return list
 }

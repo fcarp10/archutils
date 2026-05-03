@@ -15,7 +15,14 @@ func (m Model) viewItems() string {
 	if len(indices) == 0 && m.searchQuery != "" {
 		list = noMatchStyle.Render("  No matching items")
 	} else {
-		for displayIdx, origIdx := range indices {
+		total := len(indices)
+		start, end := m.visibleRange(total)
+
+		if start > 0 {
+			list += scrollUpStyle.Render(fmt.Sprintf("  ▲ %d more", start)) + "\n"
+		}
+		for displayIdx := start; displayIdx < end; displayIdx++ {
+			origIdx := indices[displayIdx]
 			choice := m.itemNames[origIdx]
 			cursor := " "
 			displayChoice := " " + choice
@@ -35,6 +42,9 @@ func (m Model) viewItems() string {
 			}
 			checked = lipgloss.NewStyle().Render(" [" + checked + "]")
 			list += fmt.Sprintf("%s%s%s\n", cursor, checked, displayChoice)
+		}
+		if end < total {
+			list += scrollDownStyle.Render(fmt.Sprintf("  ▼ %d more", total-end)) + "\n"
 		}
 	}
 	return strings.TrimRight(list, "\n")
