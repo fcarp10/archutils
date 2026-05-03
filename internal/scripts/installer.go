@@ -282,6 +282,12 @@ func (r Runner) IsExtensionInstalled(extension string) bool {
 }
 
 func (r Runner) SudoValidateCmd() *exec.Cmd {
+	// First check if sudo credentials are already cached (non-interactive).
+	// If yes, return a no-op command so the user isn't prompted unnecessarily.
+	if err := exec.Command("sudo", "-n", "true").Run(); err == nil {
+		return exec.Command("true")
+	}
+	// Credentials expired — prompt the user.
 	cmd := exec.Command("sudo", "-v")
 	cmd.Stdin = os.Stdin
 	cmd.Stderr = os.Stderr
