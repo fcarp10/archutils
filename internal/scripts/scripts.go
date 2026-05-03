@@ -1,16 +1,11 @@
 package scripts
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"sync"
-
-	c "github.com/fcarp10/archutils/internal/config"
 )
 
 var (
@@ -47,111 +42,7 @@ func getInstalledExtensions() map[string]bool {
 	return extCache
 }
 
-func IsExtensionInstalled(extension string) bool {
-	fields := strings.Fields(extension)
-	if len(fields) == 0 {
-		return false
-	}
-	return getInstalledExtensions()[fields[0]]
-}
-
-func GetExtensionDescription(extension string) string {
-	fields := strings.Fields(extension)
-	if len(fields) == 0 {
-		return ""
-	}
-	extID := fields[0]
-
-	home, _ := os.UserHomeDir()
-	if home == "" {
-		return ""
-	}
-
-	dirs := []string{
-		filepath.Join(home, ".local", "share", "VSCodium", "extensions"),
-		filepath.Join(home, ".vscode-oss", "extensions"),
-	}
-
-	for _, dir := range dirs {
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			continue
-		}
-		for _, entry := range entries {
-			if !entry.IsDir() {
-				continue
-			}
-			dirName := entry.Name()
-			if strings.HasPrefix(dirName, extID+"-") {
-				pkgPath := filepath.Join(dir, dirName, "package.json")
-				data, err := os.ReadFile(pkgPath)
-				if err != nil {
-					continue
-				}
-				var pkg struct {
-					Description string `json:"description"`
-				}
-				if err := json.Unmarshal(data, &pkg); err != nil {
-					continue
-				}
-				return pkg.Description
-			}
-		}
-	}
-	return ""
-}
-
-func InstallParu() (bool, string) {
-
-	// Check if another version of paru is installed and remove it
-	checkOutput, checkErr := exec.Command("pacman", "-Qeq", "paru").CombinedOutput()
-	if checkErr == nil && len(checkOutput) > 0 {
-		pkgs := strings.TrimSpace(string(checkOutput))
-		cleanCmd := exec.Command("sudo", "pacman", "-Rns", "--noconfirm", pkgs)
-		cleanOutput, cleanErr := cleanCmd.CombinedOutput()
-		if cleanErr != nil {
-			return false, fmt.Sprintf("Failed to uninstall previous versions of paru (%s): %v\n%s", pkgs, cleanErr, strings.TrimSpace(string(cleanOutput)))
-		}
-	}
-
-	// Install dependencies
-	baseDevCmd := exec.Command("sudo", "pacman", "-S", "--needed", "--noconfirm", "base-devel", "git")
-	if err := baseDevCmd.Run(); err != nil {
-		return false, fmt.Sprintf("Failed to install base-devel and git: %v", err)
-	}
-
-	// Clone paru from AUR
-	cloneCmd := exec.Command("git", "clone", "https://aur.archlinux.org/paru.git", "/tmp/paru")
-	if err := cloneCmd.Run(); err != nil {
-		return false, fmt.Sprintf("Failed to clone paru repository: %v", err)
-	}
-
-	// Change directory and build paru
-	buildCmd := exec.Command("sh", "-c", "cd /tmp/paru && makepkg -si --noconfirm")
-	var stdout, stderr bytes.Buffer
-	buildCmd.Stdout = &stdout
-	buildCmd.Stderr = &stderr
-
-	err := buildCmd.Run()
-	if err != nil {
-		return false, fmt.Sprintf("Installation Error:\n%v\n\nStdout:\n%s\n\nStderr:\n%s\n", err, stdout.String(), stderr.String())
-	}
-
-	// Clean up temporary directory
-	os.RemoveAll("/tmp/paru")
-
-	return true, "Paru installed successfully!"
-}
-
-func InstallVSCodeExtension(extension string) (bool, string) {
-	cmd := exec.Command(editorBinary(), "--install-extension", extension)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return false, fmt.Sprintf("%s: Failed to install %v\n%s", extension, err, strings.Trim(string(output), "\n"))
-	}
-	return true, fmt.Sprintf("%s: Installed successfully", extension)
-}
-
+// enableService runs systemctl enable --now for the given service.
 func enableService(service string, userLevel bool) (bool, string) {
 	var cmd *exec.Cmd
 	if userLevel {
@@ -166,110 +57,7 @@ func enableService(service string, userLevel bool) (bool, string) {
 	return true, fmt.Sprintf("\033[32m%s\033[0m Enabled successfully", service)
 }
 
-func CheckParuInstalled() (bool, string) {
-	_, err := exec.LookPath("paru")
-	if err != nil {
-		return false, "paru is not installed. Please select 'Install Paru' from the main menu first."
-	}
-	return true, ""
-}
-
-func IsPackageInstalled(pkg string) bool {
-	fields := strings.Fields(pkg)
-	if len(fields) == 0 {
-		return false
-	}
-	cmd := exec.Command("pacman", "-Q", fields[0])
-	return cmd.Run() == nil
-}
-
-func InstallPackage(pkg string) (bool, string) {
-	if ok, msg := CheckParuInstalled(); !ok {
-		return false, msg
-	}
-
-	fields := strings.Fields(pkg)
-	if len(fields) == 0 {
-		return false, "Invalid package string"
-	}
-	packageName := fields[0]
-	services := []string{}
-	userLevel := false
-	for i := 1; i < len(fields); i++ {
-		field := fields[i]
-		if strings.HasPrefix(field, "[") && strings.HasSuffix(field, "]") {
-			content := strings.TrimSuffix(strings.TrimPrefix(field, "["), "]")
-			if content == "user" {
-				userLevel = true
-			} else {
-				services = append(services, content)
-			}
-		}
-	}
-	// Install package
-	cmd := exec.Command("paru", "-S", "--needed", "--noconfirm", packageName)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return false, fmt.Sprintf("%s: Failed to install %v\n%s", packageName, err, strings.Trim(string(output), "\n"))
-	}
-	message := fmt.Sprintf("%s: Installed successfully", packageName)
-	// Enable services if any
-	for _, service := range services {
-		success, enableMsg := enableService(service, userLevel)
-		if !success {
-			return false, fmt.Sprintf("%s\n%s", message, enableMsg)
-		}
-		message += "\n" + enableMsg
-	}
-	return true, message
-}
-
-func GetPackageDescription(item string) string {
-	cmd := exec.Command("pacman", "-Q", "--info", item)
-	output, err := cmd.Output()
-	if err != nil {
-		return ""
-	}
-	lines := strings.Split(string(output), "\n")
-	for _, line := range lines {
-		if strings.HasPrefix(line, "Description") {
-			parts := strings.SplitN(line, ":", 2)
-			if len(parts) == 2 {
-				return strings.TrimSpace(parts[1])
-			}
-		}
-	}
-	return ""
-}
-
-func EnableAutologin() (bool, string) {
-	user := os.Getenv("USER")
-	if user == "" {
-		return false, "Unable to get current user"
-	}
-
-	content, err := c.ReadFile(c.ConfigDir() + "/autologin.conf")
-	if err != nil {
-		return false, fmt.Sprintf("Failed to read autologin.conf: %v", err)
-	}
-
-	template := string(content)
-	replaced := strings.ReplaceAll(template, "$USER", user)
-
-	cmd1 := exec.Command("sudo", "mkdir", "-p", "/etc/systemd/system/getty@tty1.service.d")
-	if err := cmd1.Run(); err != nil {
-		return false, fmt.Sprintf("Failed to create directory: %v", err)
-	}
-
-	cmd2 := exec.Command("sudo", "tee", "/etc/systemd/system/getty@tty1.service.d/autologin.conf")
-	cmd2.Stdin = strings.NewReader(replaced)
-	if err := cmd2.Run(); err != nil {
-		return false, fmt.Sprintf("Failed to write autologin.conf: %v", err)
-	}
-
-	return true, "Autologin configured successfully"
-}
-
+// disableSSHPasswordAuth writes a drop-in config disabling SSH password auth.
 func disableSSHPasswordAuth() (bool, string) {
 	cmd1 := exec.Command("sudo", "mkdir", "-p", "/etc/ssh/ssh_config.d")
 	if err := cmd1.Run(); err != nil {
@@ -284,66 +72,4 @@ func disableSSHPasswordAuth() (bool, string) {
 	}
 
 	return true, "SSH password authentication disabled successfully"
-}
-
-func EnablePasswordlessSSH() (bool, string) {
-	success1, msg1 := disableSSHPasswordAuth()
-	if !success1 {
-		return false, msg1
-	}
-	success2, msg2 := enableService("sshd", false)
-	if !success2 {
-		return false, msg1 + " - " + msg2
-	}
-	return true, msg1 + " - " + msg2
-}
-
-func EnablePasswordlessSudo() (bool, string) {
-	user := os.Getenv("USER")
-	if user == "" {
-		return false, "Unable to get current user"
-	}
-
-	sudoersPath := fmt.Sprintf("/etc/sudoers.d/%s", user)
-
-	// Check if passwordless sudo is already configured by verifying the sudoers file exists
-	if _, err := os.Stat(sudoersPath); err == nil {
-		return true, "Passwordless sudo is already configured"
-	}
-
-	// Create the sudoers drop-in file content
-	sudoersContent := fmt.Sprintf("%s ALL=(ALL) NOPASSWD: ALL\n", user)
-
-	// Write the sudoers file using sudo (this will prompt for a password)
-	cmd := exec.Command("sudo", "tee", sudoersPath)
-	cmd.Stdin = strings.NewReader(sudoersContent)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		return false, fmt.Sprintf("Failed to configure passwordless sudo: %v\n%s", err, strings.TrimSpace(stderr.String()))
-	}
-
-	// Verify the sudoers file syntax
-	checkSudoersCmd := exec.Command("sudo", "visudo", "-c", "-f", sudoersPath)
-	if checkOutput, checkErr := checkSudoersCmd.CombinedOutput(); checkErr != nil {
-		// Remove the invalid file
-		exec.Command("sudo", "rm", "-f", sudoersPath).Run()
-		return false, fmt.Sprintf("Sudoers file syntax error: %s", strings.TrimSpace(string(checkOutput)))
-	}
-
-	// Set correct permissions
-	permCmd := exec.Command("sudo", "chmod", "440", sudoersPath)
-	if err := permCmd.Run(); err != nil {
-		return false, fmt.Sprintf("Failed to set permissions on sudoers file: %v", err)
-	}
-
-	return true, "Passwordless sudo configured successfully"
-}
-
-func SudoValidateCmd() *exec.Cmd {
-	cmd := exec.Command("sudo", "-v")
-	cmd.Stdin = os.Stdin
-	cmd.Stderr = os.Stderr
-	return cmd
 }
