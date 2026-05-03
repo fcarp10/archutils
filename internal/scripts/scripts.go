@@ -8,31 +8,43 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	c "github.com/fcarp10/archutils/internal/config"
 )
 
-var installedExtensionsCache map[string]bool
-var extensionsCacheLoaded bool
+var (
+	extCacheOnce sync.Once
+	extCache     map[string]bool
+)
 
+// editorBinary returns the editor binary to use for extension management.
+// Defaults to "codium"; override with the ARCHUTILS_EDITOR environment variable
+// (e.g., "code", "code-oss", "codium").
+func editorBinary() string {
+	if bin := os.Getenv("ARCHUTILS_EDITOR"); bin != "" {
+		return bin
+	}
+	return "codium"
+}
+
+// getInstalledExtensions returns a lazily-loaded set of installed VSCode/VSCodium extensions.
+// The result is cached via sync.Once for thread-safe one-time initialization.
 func getInstalledExtensions() map[string]bool {
-	if extensionsCacheLoaded {
-		return installedExtensionsCache
-	}
-	installedExtensionsCache = make(map[string]bool)
-	extensionsCacheLoaded = true
-	cmd := exec.Command("codium", "--list-extensions")
-	output, err := cmd.Output()
-	if err != nil {
-		return installedExtensionsCache
-	}
-	for _, line := range strings.Split(string(output), "\n") {
-		ext := strings.TrimSpace(line)
-		if ext != "" {
-			installedExtensionsCache[ext] = true
+	extCacheOnce.Do(func() {
+		extCache = make(map[string]bool)
+		cmd := exec.Command(editorBinary(), "--list-extensions")
+		output, err := cmd.Output()
+		if err != nil {
+			return
 		}
-	}
-	return installedExtensionsCache
+		for _, line := range strings.Split(string(output), "\n") {
+			if ext := strings.TrimSpace(line); ext != "" {
+				extCache[ext] = true
+			}
+		}
+	})
+	return extCache
 }
 
 func IsExtensionInstalled(extension string) bool {
@@ -132,7 +144,7 @@ func InstallParu() (bool, string) {
 }
 
 func InstallVSCodeExtension(extension string) (bool, string) {
-	cmd := exec.Command("codium", "--install-extension", extension)
+	cmd := exec.Command(editorBinary(), "--install-extension", extension)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return false, fmt.Sprintf("%s: Failed to install %v\n%s", extension, err, strings.Trim(string(output), "\n"))
