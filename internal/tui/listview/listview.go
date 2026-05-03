@@ -247,20 +247,30 @@ func (m Model) handleCategoryEnter() (Model, tea.Cmd) {
 	m.itemNames = names
 	m.itemNames, m.selectedItems = initializeSelection(names)
 	m.installedItems = make(map[int]bool)
-	for i, item := range m.itemNames {
-		switch m.directory {
-		case config.PkgsDir():
-			if m.installer.IsPackageInstalled(item) {
-				m.installedItems[i] = true
-				m.categories[m.cursor].Items[i].Description = m.installer.GetPackageDescription(item)
+
+	switch m.directory {
+	case config.PkgsDir():
+		installed := m.installer.GetInstalledPackages()
+		for i, item := range m.itemNames {
+			fields := strings.Fields(item)
+			if len(fields) == 0 {
+				continue
 			}
-		case config.ExtDir():
+			pkgName := fields[0]
+			if desc, ok := installed[pkgName]; ok {
+				m.installedItems[i] = true
+				m.categories[m.cursor].Items[i].Description = desc
+			}
+		}
+	case config.ExtDir():
+		for i, item := range m.itemNames {
 			if m.installer.IsExtensionInstalled(item) {
 				m.installedItems[i] = true
 				m.categories[m.cursor].Items[i].Description = m.installer.GetExtensionDescription(item)
 			}
 		}
 	}
+
 	m.selectedCategory = m.categories[m.cursor]
 	m.cursor = 0
 	m.currentStage = stageItems
