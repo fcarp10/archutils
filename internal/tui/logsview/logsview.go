@@ -33,6 +33,7 @@ type failedInstalledItem string
 type finishedInstallItems string
 type CancelInstall struct{}
 type SudoValidated struct{ err error }
+type WheelGroupValidated struct{ err error }
 
 const (
 	ScriptParu ScriptType = iota
@@ -140,6 +141,14 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		installer := m.installer
 		return m, tea.Batch(m.spinner.Tick, func() tea.Msg { return runScript(installer, m.pendingScript) })
 
+	case WheelGroupValidated:
+		m.validatingSudo = false
+		if msg.err != nil {
+			return m, func() tea.Msg { return failedScript("Authentication failed: " + msg.err.Error()) }
+		}
+		m.scriptRunning = true
+		return m, tea.Batch(m.spinner.Tick, func() tea.Msg { return runScript(m.installer, m.pendingScript) })
+
 	case successInstalledItem:
 		m.logs = fmt.Sprintf("%s %s", CheckMark, strings.Trim(string(msg), "\n"))
 		m.successItemsNum++
@@ -173,8 +182,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case RunningScript:
 		m.pendingScript = ScriptType(msg)
 		if ScriptType(msg) == ScriptAddUserToWheel {
-			m.scriptRunning = true
-			return m, tea.Batch(m.spinner.Tick, func() tea.Msg { return runScript(m.installer, m.pendingScript) })
+			m.validatingSudo = true
+			return m, tea.ExecProcess(m.installer.WheelGroupCmd(), func(err error) tea.Msg {
+				return WheelGroupValidated{err: err}
+			})
 		}
 		m.validatingSudo = true
 		return m, tea.ExecProcess(m.installer.SudoValidateCmd(), func(err error) tea.Msg {
@@ -286,7 +297,11 @@ func (m Model) View() string {
 	var s string
 	if m.validatingSudo {
 		spin := m.spinner.View() + " "
-		s = spin + "Authenticating with sudo, please enter your password..."
+		if m.pendingScript == ScriptAddUserToWheel {
+			s = spin + "Authenticating with root, please enter your password..."
+		} else {
+			s = spin + "Authenticating with sudo, please enter your password..."
+		}
 	} else if m.itemLogs {
 		n := len(m.itemNames)
 		w := lipgloss.Width(fmt.Sprintf("%d", n))

@@ -14,6 +14,7 @@ type mockScriptInstaller struct {
 	passwordless   func() (bool, string)
 	sudo           func() (bool, string)
 	addUserToWheel func() (bool, string)
+	wheelGroupCmd  func() *exec.Cmd
 }
 
 func (m mockScriptInstaller) InstallPackage(pkg string) (bool, string) {
@@ -63,6 +64,13 @@ func (m mockScriptInstaller) AddUserToWheel() (bool, string) {
 		return m.addUserToWheel()
 	}
 	return true, "user added to wheel"
+}
+
+func (m mockScriptInstaller) WheelGroupCmd() *exec.Cmd {
+	if m.wheelGroupCmd != nil {
+		return m.wheelGroupCmd()
+	}
+	return exec.Command("true")
 }
 
 func (m mockScriptInstaller) GetPackageDescription(item string) string {

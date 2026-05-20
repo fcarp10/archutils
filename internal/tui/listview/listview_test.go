@@ -26,6 +26,7 @@ func (m mockInstaller) EnableAutologin() (bool, string)           { return true,
 func (m mockInstaller) EnablePasswordlessSSH() (bool, string)     { return true, "ssh configured" }
 func (m mockInstaller) EnablePasswordlessSudo() (bool, string)    { return true, "sudo configured" }
 func (m mockInstaller) AddUserToWheel() (bool, string)            { return true, "user added to wheel" }
+func (m mockInstaller) WheelGroupCmd() *exec.Cmd                  { return exec.Command("true") }
 func (m mockInstaller) GetPackageDescription(item string) string  { return "description of " + item }
 func (m mockInstaller) GetExtensionDescription(ext string) string { return "description of " + ext }
 func (m mockInstaller) CheckParuInstalled() (bool, string)        { return true, "" }
