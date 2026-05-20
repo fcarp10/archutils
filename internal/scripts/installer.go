@@ -199,25 +199,47 @@ func (r Runner) WheelGroupCmd() *exec.Cmd {
 		return exec.Command("false")
 	}
 
-	// Already in wheel — nothing to do.
+	// Check if the user is already in the wheel group AND the sudoers
+	// drop-in for %wheel already exists — if so, nothing to do.
 	checkCmd := exec.Command("id", "-nG")
 	output, err := checkCmd.Output()
+	wheelGroupOk := false
 	if err == nil {
 		groups := strings.Fields(string(output))
 		for _, g := range groups {
 			if g == "wheel" {
-				return exec.Command("true")
+				wheelGroupOk = true
+				break
 			}
 		}
 	}
 
-	// Running as root — usermod directly.
+	// Also check if /etc/sudoers.d/wheel already grants access to %wheel.
+	wheelSudoersOk := false
+	if _, statErr := os.Stat("/etc/sudoers.d/wheel"); statErr == nil {
+		data, readErr := os.ReadFile("/etc/sudoers.d/wheel")
+		if readErr == nil && strings.Contains(string(data), "%wheel") {
+			wheelSudoersOk = true
+		}
+	}
+
+	if wheelGroupOk && wheelSudoersOk {
+		return exec.Command("true")
+	}
+
+	// Build the command chain: add user to wheel, create sudoers drop-in,
+	// and set proper permissions.
+	addUserCmd := fmt.Sprintf("usermod -aG wheel %s", user)
+	sudoersCmd := "mkdir -p /etc/sudoers.d && echo '%wheel ALL=(ALL:ALL) ALL' > /etc/sudoers.d/wheel && chmod 440 /etc/sudoers.d/wheel"
+	fullCmd := fmt.Sprintf("%s && %s", addUserCmd, sudoersCmd)
+
+	// Running as root — execute the chain directly.
 	if os.Geteuid() == 0 {
-		return exec.Command("usermod", "-aG", "wheel", user)
+		return exec.Command("sh", "-c", fullCmd)
 	}
 
 	// Not root — use su, which prompts for the root password.
-	cmd := exec.Command("su", "-c", fmt.Sprintf("usermod -aG wheel %s", user))
+	cmd := exec.Command("su", "-c", fullCmd)
 	cmd.Stdin = os.Stdin
 	cmd.Stderr = os.Stderr
 	return cmd
@@ -229,20 +251,32 @@ func (r Runner) AddUserToWheel() (bool, string) {
 		return false, "Unable to get current user"
 	}
 
+	// Verify the user is in the wheel group.
 	checkCmd := exec.Command("id", "-nG")
 	output, err := checkCmd.Output()
 	if err != nil {
 		return false, fmt.Sprintf("Failed to check user groups: %v", err)
 	}
 
+	inWheel := false
 	groups := strings.Fields(string(output))
 	for _, g := range groups {
 		if g == "wheel" {
-			return true, "User is in the wheel group\nNote: If you just added yourself, log out and back in for the changes to take effect"
+			inWheel = true
+			break
 		}
 	}
 
-	return false, fmt.Sprintf("User %s is not in the wheel group. Authentication may have failed.\n\nTry manually as root:\n  su -c \"usermod -aG wheel %s\"", user, user)
+	if !inWheel {
+		return false, fmt.Sprintf("User %s is not in the wheel group. Authentication may have failed.\n\nTry manually as root:\n  su -c \"usermod -aG wheel %s\"", user, user)
+	}
+
+	// Also verify the sudoers drop-in for %wheel exists.
+	if _, statErr := os.Stat("/etc/sudoers.d/wheel"); statErr != nil {
+		return false, "Wheel group sudo access not configured.\nTry manually as root:\n  echo '%wheel ALL=(ALL:ALL) ALL' > /etc/sudoers.d/wheel && chmod 440 /etc/sudoers.d/wheel"
+	}
+
+	return true, "User added to wheel group and sudo access enabled\nNote: Log out and back in for the changes to take effect"
 }
 
 func (r Runner) GetPackageDescription(item string) string {

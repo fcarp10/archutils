@@ -36,11 +36,11 @@ var menuItems = []menuItem{
 	},
 	{
 		title:       "Configure Passwordless Sudo",
-		description: "Configure passwordless sudo for the current user (will prompt for password once).\n\nNote: If you see 'Sudo authentication failed', you are not in the wheel group.\nUse 'Add User to Wheel Group' first.",
+		description: "Configure passwordless sudo for the current user (will prompt for password once).\n\nPrerequisite: You must be in the wheel group and sudo must be enabled.\nUse 'Add User to Wheel Group' first if you cannot run sudo.",
 	},
 	{
 		title:       "Add User to Wheel Group",
-		description: "Add the current user to the wheel group (requires root password, not sudo).\n\nNote: After running this option, log out and back in for changes to take effect.",
+		description: "Add the current user to the wheel group and enable sudo access for the wheel group (requires root password via su, not sudo).\n\nPrerequisite for 'Configure Passwordless Sudo' if you are unable to use sudo.\nAfter running this option, log out and back in for changes to take effect.",
 	},
 }
 
