@@ -36,7 +36,11 @@ var menuItems = []menuItem{
 	},
 	{
 		title:       "Configure Passwordless Sudo",
-		description: "Configure passwordless sudo for the current user (will prompt for password once)",
+		description: "Configure passwordless sudo for the current user (will prompt for password once).\n\nNote: If you see 'Sudo authentication failed', you are not in the wheel group.\nUse 'Add User to Wheel Group' first.",
+	},
+	{
+		title:       "Add User to Wheel Group",
+		description: "Add the current user to the wheel group (requires root password, not sudo).\n\nNote: After running this option, log out and back in for changes to take effect.",
 	},
 }
 
@@ -90,6 +94,11 @@ func (m Model) handleMenuEnter() (Model, tea.Cmd) {
 		m.logsVisible = true
 		m.logsView = logsview.NewScript(m.installer)
 		m.logsView, cmd = m.logsView.Update(logsview.RunningScript(logsview.ScriptPasswordlessSudo))
+		cmds = append(cmds, cmd)
+	case menuAddUserToWheel:
+		m.logsVisible = true
+		m.logsView = logsview.NewScript(m.installer)
+		m.logsView, cmd = m.logsView.Update(logsview.RunningScript(logsview.ScriptAddUserToWheel))
 		cmds = append(cmds, cmd)
 	default:
 		switch m.cursor {

@@ -30,6 +30,7 @@ const (
 	menuAutologin
 	menuPasswordlessSSH
 	menuPasswordlessSudo
+	menuAddUserToWheel
 )
 
 // Minimum terminal dimensions for usable layout.

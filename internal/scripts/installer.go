@@ -19,6 +19,7 @@ type Installer interface {
 	EnableAutologin() (bool, string)
 	EnablePasswordlessSSH() (bool, string)
 	EnablePasswordlessSudo() (bool, string)
+	AddUserToWheel() (bool, string)
 	GetPackageDescription(item string) string
 	GetExtensionDescription(extension string) string
 	CheckParuInstalled() (bool, string)
@@ -188,8 +189,52 @@ func (r Runner) EnablePasswordlessSudo() (bool, string) {
 	if err := permCmd.Run(); err != nil {
 		return false, fmt.Sprintf("Failed to set permissions on sudoers file: %v", err)
 	}
-
 	return true, "Passwordless sudo configured successfully"
+}
+
+func (r Runner) AddUserToWheel() (bool, string) {
+	user := os.Getenv("USER")
+	if user == "" {
+		return false, "Unable to get current user"
+	}
+
+	// Check if the user is already in the wheel group.
+	checkCmd := exec.Command("id", "-nG")
+	output, err := checkCmd.Output()
+	if err != nil {
+		return false, fmt.Sprintf("Failed to check user groups: %v", err)
+	}
+
+	groups := strings.Fields(string(output))
+	for _, g := range groups {
+		if g == "wheel" {
+			return true, "User is already in the wheel group"
+		}
+	}
+
+	// Running as root — can use usermod directly without su/sudo.
+	if os.Geteuid() == 0 {
+		cmd := exec.Command("usermod", "-aG", "wheel", user)
+		var stderr bytes.Buffer
+		cmd.Stderr = &stderr
+		if err := cmd.Run(); err != nil {
+			return false, fmt.Sprintf("Failed to add user to wheel group: %v\n%s", err, strings.TrimSpace(stderr.String()))
+		}
+		return true, "User added to wheel group successfully\nNote: You may need to log out and back in for the changes to take effect"
+	}
+
+	// Not root — use su to avoid chicken-and-egg problem with sudo.
+	cmd := exec.Command("su", "-c", fmt.Sprintf("usermod -aG wheel %s", user))
+	cmd.Stdin = os.Stdin
+	cmd.Stderr = os.Stderr
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+
+	if err := cmd.Run(); err != nil {
+		return false, fmt.Sprintf("Failed to add user to wheel group.\n%s\n\nPlease try manually as root:\n  su -c \"usermod -aG wheel %s\"", strings.TrimSpace(stdout.String()), user)
+	}
+
+	return true, "User added to wheel group successfully\nNote: You may need to log out and back in for the changes to take effect"
 }
 
 func (r Runner) GetPackageDescription(item string) string {

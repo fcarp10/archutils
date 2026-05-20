@@ -7,12 +7,13 @@ import (
 
 // mockScriptInstaller implements scripts.Installer with minimal stubs for logsview testing.
 type mockScriptInstaller struct {
-	installPkg   func(string) (bool, string)
-	installExt   func(string) (bool, string)
-	installParu  func() (bool, string)
-	autologin    func() (bool, string)
-	passwordless func() (bool, string)
-	sudo         func() (bool, string)
+	installPkg     func(string) (bool, string)
+	installExt     func(string) (bool, string)
+	installParu    func() (bool, string)
+	autologin      func() (bool, string)
+	passwordless   func() (bool, string)
+	sudo           func() (bool, string)
+	addUserToWheel func() (bool, string)
 }
 
 func (m mockScriptInstaller) InstallPackage(pkg string) (bool, string) {
@@ -55,6 +56,13 @@ func (m mockScriptInstaller) EnablePasswordlessSudo() (bool, string) {
 		return m.sudo()
 	}
 	return true, "sudo configured"
+}
+
+func (m mockScriptInstaller) AddUserToWheel() (bool, string) {
+	if m.addUserToWheel != nil {
+		return m.addUserToWheel()
+	}
+	return true, "user added to wheel"
 }
 
 func (m mockScriptInstaller) GetPackageDescription(item string) string {

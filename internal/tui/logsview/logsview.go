@@ -39,6 +39,7 @@ const (
 	ScriptAutologin
 	ScriptPasswordlessSSH
 	ScriptPasswordlessSudo
+	ScriptAddUserToWheel
 )
 
 const (
@@ -171,6 +172,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 	case RunningScript:
 		m.pendingScript = ScriptType(msg)
+		if ScriptType(msg) == ScriptAddUserToWheel {
+			m.scriptRunning = true
+			return m, tea.Batch(m.spinner.Tick, func() tea.Msg { return runScript(m.installer, m.pendingScript) })
+		}
 		m.validatingSudo = true
 		return m, tea.ExecProcess(m.installer.SudoValidateCmd(), func(err error) tea.Msg {
 			return SudoValidated{err: err}
@@ -266,6 +271,8 @@ func runScript(installer scripts.Installer, script ScriptType) tea.Msg {
 		success, logs = installer.EnablePasswordlessSSH()
 	case ScriptPasswordlessSudo:
 		success, logs = installer.EnablePasswordlessSudo()
+	case ScriptAddUserToWheel:
+		success, logs = installer.AddUserToWheel()
 	default:
 	}
 	if success {
