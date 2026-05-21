@@ -4,5 +4,5 @@ vscodium-bin-marketplace
 neovim
 vim-plug
 go
-jdk-openjdk
+# jdk-openjdk
 uv

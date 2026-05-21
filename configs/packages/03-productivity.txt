@@ -17,5 +17,5 @@ gnome-text-editor
 nextcloud-client
 # python-pympress
 # drawio-desktop-bin
-ollama
+# ollama
 # ollama-rocm

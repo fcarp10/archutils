@@ -1,8 +1,8 @@
 ### Network
-mullvad-vpn-bin
-nebula
-nm-connection-editor
-nmap
+# mullvad-vpn-bin
+# nebula
+# nm-connection-editor
+# nmap
 # termshark
 # mtr
 # remmina

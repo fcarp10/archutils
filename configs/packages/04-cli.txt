@@ -16,20 +16,20 @@ wget
 downgrade
 duf
 rsync
-ncdu
+# ncdu
 btop
-tealdeer
-yazi
+# tealdeer
+# yazi
 fd
 ripgrep
 fzf
 exfatprogs
-zoxide
-cameractrls
+# zoxide
+# cameractrls
 
 
 ## GIT
-git-delta
+# git-delta
 # lazygit
 
 
@@ -43,5 +43,5 @@ imagemagick
 
 ## SSH
 keychain
-xtermcontrol
+# xtermcontrol
 
