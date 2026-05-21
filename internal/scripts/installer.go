@@ -14,7 +14,8 @@ import (
 
 type Installer interface {
 	InstallPackage(pkg string) (bool, string)
-	InstallParu() (bool, string)
+	ParuStepCount() int
+	ParuStepCmd(step int) *exec.Cmd
 	InstallVSCodeExtension(extension string) (bool, string)
 	EnableAutologin() (bool, string)
 	EnablePasswordlessSSH() (bool, string)
@@ -72,40 +73,30 @@ func (r Runner) InstallPackage(pkg string) (bool, string) {
 	return true, message
 }
 
-func (r Runner) InstallParu() (bool, string) {
-	checkOutput, checkErr := exec.Command("pacman", "-Qeq", "paru").CombinedOutput()
-	if checkErr == nil && len(checkOutput) > 0 {
-		pkgs := strings.TrimSpace(string(checkOutput))
-		cleanCmd := exec.Command("sudo", "pacman", "-Rns", "--noconfirm", pkgs)
-		cleanOutput, cleanErr := cleanCmd.CombinedOutput()
-		if cleanErr != nil {
-			return false, fmt.Sprintf("Failed to uninstall previous versions of paru (%s): %v\n%s", pkgs, cleanErr, strings.TrimSpace(string(cleanOutput)))
-		}
+func (r Runner) ParuStepCount() int { return 4 }
+
+func (r Runner) ParuStepCmd(step int) *exec.Cmd {
+	var cmd *exec.Cmd
+	switch step {
+	case 0:
+		cmd = exec.Command("sh", "-c",
+			"if pacman -Qeq paru 2>/dev/null; then sudo pacman -Rns --noconfirm paru; fi")
+	case 1:
+		cmd = exec.Command("sudo", "pacman", "-S", "--needed", "--noconfirm",
+			"base-devel", "git", "rust")
+	case 2:
+		cmd = exec.Command("sh", "-c",
+			"rm -rf /tmp/paru && git clone https://aur.archlinux.org/paru.git /tmp/paru")
+	case 3:
+		cmd = exec.Command("makepkg", "-si", "--noconfirm")
+		cmd.Dir = "/tmp/paru"
+	default:
+		return exec.Command("false")
 	}
-
-	baseDevCmd := exec.Command("sudo", "pacman", "-S", "--needed", "--noconfirm", "base-devel", "git")
-	if err := baseDevCmd.Run(); err != nil {
-		return false, fmt.Sprintf("Failed to install base-devel and git: %v", err)
-	}
-
-	cloneCmd := exec.Command("git", "clone", "https://aur.archlinux.org/paru.git", "/tmp/paru")
-	if err := cloneCmd.Run(); err != nil {
-		return false, fmt.Sprintf("Failed to clone paru repository: %v", err)
-	}
-
-	buildCmd := exec.Command("makepkg", "-si", "--noconfirm")
-	buildCmd.Dir = "/tmp/paru"
-	var stdout, stderr bytes.Buffer
-	buildCmd.Stdout = &stdout
-	buildCmd.Stderr = &stderr
-
-	err := buildCmd.Run()
-	if err != nil {
-		return false, fmt.Sprintf("Installation Error:\n%v\n\nStdout:\n%s\n\nStderr:\n%s\n", err, stdout.String(), stderr.String())
-	}
-
-	os.RemoveAll("/tmp/paru")
-	return true, "Paru installed successfully!"
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd
 }
 
 func (r Runner) InstallVSCodeExtension(extension string) (bool, string) {

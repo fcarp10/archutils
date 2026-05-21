@@ -34,6 +34,14 @@ type finishedInstallItems string
 type CancelInstall struct{}
 type SudoValidated struct{ err error }
 type WheelGroupValidated struct{ err error }
+type ParuStepValidated struct{ err error }
+
+var paruStepNames = []string{
+	"Removing old paru",
+	"Installing build dependencies",
+	"Cloning repository",
+	"Building and installing paru",
+}
 
 const (
 	ScriptParu ScriptType = iota
@@ -64,6 +72,7 @@ type Model struct {
 	pendingScript   ScriptType
 	validatingSudo  bool
 	scriptRunning   bool
+	paruStepIndex   int
 }
 
 func (m Model) Init() tea.Cmd {
@@ -149,6 +158,32 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.scriptRunning = true
 		return m, tea.Batch(m.spinner.Tick, func() tea.Msg { return runScript(m.installer, m.pendingScript) })
 
+	case ParuStepValidated:
+		m.validatingSudo = false
+		step := m.paruStepIndex
+		total := m.installer.ParuStepCount()
+		if msg.err != nil {
+			name := "step"
+			if step >= 0 && step < len(paruStepNames) {
+				name = paruStepNames[step]
+			}
+			return m, func() tea.Msg {
+				return failedScript(fmt.Sprintf("Paru installation failed at step %d/%d (%s): %v", step+1, total, name, msg.err))
+			}
+		}
+		m.paruStepIndex = step + 1
+		if m.paruStepIndex >= total {
+			ok, result := m.installer.CheckParuInstalled()
+			if ok {
+				return m, func() tea.Msg { return successScript("Paru installed successfully!") }
+			}
+			return m, func() tea.Msg { return failedScript(result) }
+		}
+		m.validatingSudo = true
+		return m, tea.ExecProcess(m.installer.ParuStepCmd(m.paruStepIndex), func(err error) tea.Msg {
+			return ParuStepValidated{err: err}
+		})
+
 	case successInstalledItem:
 		m.logs = fmt.Sprintf("%s %s", CheckMark, strings.Trim(string(msg), "\n"))
 		m.successItemsNum++
@@ -181,6 +216,13 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 
 	case RunningScript:
 		m.pendingScript = ScriptType(msg)
+		if ScriptType(msg) == ScriptParu {
+			m.paruStepIndex = 0
+			m.validatingSudo = true
+			return m, tea.ExecProcess(m.installer.ParuStepCmd(0), func(err error) tea.Msg {
+				return ParuStepValidated{err: err}
+			})
+		}
 		if ScriptType(msg) == ScriptAddUserToWheel {
 			m.validatingSudo = true
 			return m, tea.ExecProcess(m.installer.WheelGroupCmd(), func(err error) tea.Msg {
@@ -274,8 +316,6 @@ func runScript(installer scripts.Installer, script ScriptType) tea.Msg {
 	var success bool
 	var logs string
 	switch script {
-	case ScriptParu:
-		success, logs = installer.InstallParu()
 	case ScriptAutologin:
 		success, logs = installer.EnableAutologin()
 	case ScriptPasswordlessSSH:
@@ -299,6 +339,14 @@ func (m Model) View() string {
 		spin := m.spinner.View() + " "
 		if m.pendingScript == ScriptAddUserToWheel {
 			s = spin + "Authenticating with root, please enter your password..."
+		} else if m.pendingScript == ScriptParu {
+			total := m.installer.ParuStepCount()
+			step := m.paruStepIndex
+			name := ""
+			if step >= 0 && step < len(paruStepNames) {
+				name = paruStepNames[step]
+			}
+			s = spin + fmt.Sprintf("Installing paru (step %d/%d): %s...", step+1, total, name)
 		} else {
 			s = spin + "Authenticating with sudo, please enter your password..."
 		}

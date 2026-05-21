@@ -18,7 +18,6 @@ type mockInstaller struct {
 func (m mockInstaller) InstallPackage(pkg string) (bool, string) {
 	return true, pkg + ": installed"
 }
-func (m mockInstaller) InstallParu() (bool, string) { return true, "paru installed" }
 func (m mockInstaller) InstallVSCodeExtension(ext string) (bool, string) {
 	return true, ext + ": installed"
 }
@@ -27,6 +26,8 @@ func (m mockInstaller) EnablePasswordlessSSH() (bool, string)     { return true,
 func (m mockInstaller) EnablePasswordlessSudo() (bool, string)    { return true, "sudo configured" }
 func (m mockInstaller) AddUserToWheel() (bool, string)            { return true, "user added to wheel" }
 func (m mockInstaller) WheelGroupCmd() *exec.Cmd                  { return exec.Command("true") }
+func (m mockInstaller) ParuStepCount() int                        { return 4 }
+func (m mockInstaller) ParuStepCmd(step int) *exec.Cmd            { return exec.Command("true") }
 func (m mockInstaller) GetPackageDescription(item string) string  { return "description of " + item }
 func (m mockInstaller) GetExtensionDescription(ext string) string { return "description of " + ext }
 func (m mockInstaller) CheckParuInstalled() (bool, string)        { return true, "" }

@@ -9,12 +9,12 @@ import (
 type mockScriptInstaller struct {
 	installPkg     func(string) (bool, string)
 	installExt     func(string) (bool, string)
-	installParu    func() (bool, string)
 	autologin      func() (bool, string)
 	passwordless   func() (bool, string)
 	sudo           func() (bool, string)
 	addUserToWheel func() (bool, string)
 	wheelGroupCmd  func() *exec.Cmd
+	paruStepCmd    func(int) *exec.Cmd
 }
 
 func (m mockScriptInstaller) InstallPackage(pkg string) (bool, string) {
@@ -22,13 +22,6 @@ func (m mockScriptInstaller) InstallPackage(pkg string) (bool, string) {
 		return m.installPkg(pkg)
 	}
 	return true, pkg + ": installed"
-}
-
-func (m mockScriptInstaller) InstallParu() (bool, string) {
-	if m.installParu != nil {
-		return m.installParu()
-	}
-	return true, "paru installed"
 }
 
 func (m mockScriptInstaller) InstallVSCodeExtension(ext string) (bool, string) {
@@ -69,6 +62,15 @@ func (m mockScriptInstaller) AddUserToWheel() (bool, string) {
 func (m mockScriptInstaller) WheelGroupCmd() *exec.Cmd {
 	if m.wheelGroupCmd != nil {
 		return m.wheelGroupCmd()
+	}
+	return exec.Command("true")
+}
+
+func (m mockScriptInstaller) ParuStepCount() int { return 4 }
+
+func (m mockScriptInstaller) ParuStepCmd(step int) *exec.Cmd {
+	if m.paruStepCmd != nil {
+		return m.paruStepCmd(step)
 	}
 	return exec.Command("true")
 }
