@@ -71,22 +71,23 @@ var (
 
 // Model is the main list view model that manages all UI stages.
 type Model struct {
-	width            int
-	height           int
-	logsView         logsview.Model
-	categories       []config.Category
-	categoryNames    []string
-	selectedCategory config.Category
-	cursor           int
-	currentStage     int
-	selectedItems    map[int]struct{}
-	itemNames        []string
-	installedItems   map[int]bool
-	logsVisible      bool
-	directory        string
-	installer        scripts.Installer
-	searchMode       bool
-	searchQuery      string
+	width                int
+	height               int
+	logsView             logsview.Model
+	categories           []config.Category
+	categoryNames        []string
+	selectedCategory     config.Category
+	cursor               int
+	currentStage         int
+	selectedItems        map[int]struct{}
+	itemNames            []string
+	installedItems       map[int]bool
+	logsVisible          bool
+	directory            string
+	installer            scripts.Installer
+	searchMode           bool
+	searchQuery          string
+	paruReinstallConfirm bool
 }
 
 // New creates a new Model starting at the main menu.
@@ -222,6 +223,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		if m.paruReinstallConfirm {
+			switch {
+			case key.Matches(msg, helpkeys.Keys.ConfirmYes):
+				m.paruReinstallConfirm = false
+				m, cmd = m.startParuInstall()
+				cmds = append(cmds, cmd)
+			case key.Matches(msg, helpkeys.Keys.ConfirmNo), key.Matches(msg, helpkeys.Keys.Back):
+				m.paruReinstallConfirm = false
+				m.logsVisible = true
+				m.logsView = logsview.NewInfo("Paru reinstall cancelled.")
+			case key.Matches(msg, helpkeys.Keys.Quit):
+				return m, tea.Quit
+			}
+			return m, tea.Batch(cmds...)
+		}
+
 		if m.currentStage == stageConfirm {
 			switch {
 			case key.Matches(msg, helpkeys.Keys.ConfirmYes):
@@ -331,6 +348,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 	}
 	return m, tea.Batch(cmds...)
+}
+
+// startParuInstall initialises and runs the paru installation scripts.
+func (m Model) startParuInstall() (Model, tea.Cmd) {
+	m.logsVisible = true
+	m.logsView = logsview.NewScript(m.installer)
+	var cmd tea.Cmd
+	m.logsView, cmd = m.logsView.Update(logsview.RunningScript(logsview.ScriptParu))
+	return m, cmd
 }
 
 func (m Model) handleSearchInput(msg tea.KeyMsg) Model {

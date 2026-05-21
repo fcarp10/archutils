@@ -76,9 +76,14 @@ func (m Model) handleMenuEnter() (Model, tea.Cmd) {
 
 	switch m.cursor {
 	case menuInstallParu:
-		m.logsVisible = true
-		m.logsView = logsview.NewScript(m.installer)
-		m.logsView, cmd = m.logsView.Update(logsview.RunningScript(logsview.ScriptParu))
+		installed, _ := m.installer.CheckParuInstalled()
+		if installed {
+			m.paruReinstallConfirm = true
+			m.logsVisible = true
+			m.logsView = logsview.NewInfo("Paru is already installed. Press 'y' to reinstall or 'n' to cancel.")
+			return m, nil
+		}
+		m, cmd = m.startParuInstall()
 		cmds = append(cmds, cmd)
 	case menuAutologin:
 		m.logsVisible = true
