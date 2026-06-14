@@ -1,8 +1,9 @@
 ### Web Browsers
+# helium-browser-bin
 # ungoogled-chromium-bin
 # brave-bin
 # librewolf-bin
 # zen-browser-bin
 # firefox
-ferdium-bin
+# ferdium-bin
 # junction

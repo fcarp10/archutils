@@ -1,8 +1,9 @@
 ### Development
+zed
 vscodium-bin
 vscodium-bin-marketplace
 neovim
 vim-plug
-go
+# go
 # jdk-openjdk
-uv
+# uv

@@ -12,7 +12,7 @@ isd
 # yubikey-full-disk-encryption
 # logiops
 
-### Password manager
+## Password manager
 # pass
 # pass-otp
 # pinentry

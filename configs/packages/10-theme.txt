@@ -1,5 +1,4 @@
 ### Theme
-zsh-antidote
 papirus-icon-theme
 papirus-folders
 adw-gtk-theme
@@ -9,4 +8,3 @@ ttf-roboto
 ttf-roboto-mono
 ttf-roboto-mono-nerd
 ttf-jetbrains-mono-nerd
-sound-theme-elementary

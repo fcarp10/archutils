@@ -2,6 +2,7 @@
 ## Shell
 alacritty
 zsh
+zsh-antidote
 bash-completion
 fastfetch
 lsd

@@ -1,4 +1,12 @@
 ### Window Managers
+## Niri
+niri
+xdg-desktop-portal-gnome
+xdg-desktop-portal-gtk
+noctalia-shell
+xwayland-satellite
+gnome-keyring
+
 ## Hyprland
 # hyprland
 # xdg-desktop-portal-gtk
@@ -10,15 +18,3 @@
 # hyprpicker
 # hyprlock
 # swayosd [swayosd-libinput-backend]
-
-## Niri
-niri
-xdg-desktop-portal-gnome
-xdg-desktop-portal-gtk
-waybar
-mako
-wofi
-swaybg
-swayosd [swayosd-libinput-backend]
-xwayland-satellite
-gnome-keyring
