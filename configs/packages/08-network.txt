@@ -1,5 +1,6 @@
 ### Network
 # mullvad-vpn-bin
+# ivpn-ui
 # nebula
 # nm-connection-editor
 # nmap

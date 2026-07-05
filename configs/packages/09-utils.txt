@@ -11,6 +11,7 @@ gnome-disk-utility
 isd
 # yubikey-full-disk-encryption
 # logiops
+# llama-cpp-vulkan
 
 ## Password manager
 # pass

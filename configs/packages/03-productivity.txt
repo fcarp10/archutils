@@ -17,4 +17,4 @@
 # gnome-text-editor
 # nextcloud-client
 # python-pympress
-# drawio-desktop-bi
+# drawio-desktop-bin
