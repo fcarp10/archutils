@@ -3,7 +3,7 @@
 niri
 xdg-desktop-portal-gnome
 xdg-desktop-portal-gtk
-noctalia-shell
+noctalia
 xwayland-satellite
 gnome-keyring
 
@@ -18,3 +18,4 @@ gnome-keyring
 # hyprpicker
 # hyprlock
 # swayosd [swayosd-libinput-backend]
+# wofi-pass

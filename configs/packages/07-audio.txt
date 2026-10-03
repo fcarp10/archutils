@@ -13,4 +13,4 @@ sof-firmware
 bluez [bluetooth]
 bluez-libs
 bluez-utils
-blueberry
+# blueberry

@@ -1,6 +1,6 @@
 ### CLI Tools
 ## Shell
-alacritty
+kitty
 zsh
 zsh-antidote
 bash-completion
@@ -8,6 +8,7 @@ fastfetch
 lsd
 bat
 less
+firejail
 
 
 ## Utilities

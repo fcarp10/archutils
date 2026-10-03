@@ -12,6 +12,7 @@
 # texlive-binextra
 # texlive-xetex
 # signal-desktop
+# signal-cli
 # ttf-ms-win10-auto
 # tectonic
 # gnome-text-editor
